@@ -1,0 +1,34 @@
+cabal-version:   2.4
+name:            function-graph
+version:         0.1.0.0
+license:         BSD-3-Clause
+license-file:    LICENSE
+author:          Rune K. Svendsen
+maintainer:      runesvend@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
+
+common warnings
+    ghc-options: -Wall -rtsopts
+
+library
+    import:           warnings
+    exposed-modules:  MyLib
+    build-depends:    base
+                    , hashable
+                    , bellman-ford
+                    , dump-decls
+                    , aeson
+                    , bytestring
+                    , containers
+                    , utf8-string
+                    , pretty-show
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+executable function-graph
+    main-is:          Main.hs
+    hs-source-dirs:   app
+    build-depends:    base, function-graph
+    default-language: Haskell2010
+    ghc-options:      -Wall

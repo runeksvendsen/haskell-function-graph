@@ -1,0 +1,20 @@
+packages:
+    *.cabal
+
+with-compiler: /nix/store/cmh3w1792vnss54q94bgqdlkrlph7p8i-ghc-8.10.7/bin/ghc
+
+source-repository-package
+    type: git
+    location: https://github.com/runeksvendsen/dump-decls.git
+    tag: 18d2371027223612f092c17f2853657df5215677
+
+source-repository-package
+    type: git
+    location: https://github.com/runeksvendsen/bellman-ford.git
+    tag: 28cc5ec7a407dd194672e4115046da07bfeeae77
+
+source-repository-package
+    type: git
+    location: https://github.com/runeksvendsen/mono-traversable.git
+    tag: 5bcff3e91337c071a7855be0691eae1bc91f35b5
+    subdir: mutable-containers
