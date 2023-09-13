@@ -27,11 +27,13 @@ import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
 import Control.Monad (forM, forM_, unless)
-import Debug.Trace (traceM, traceShow, traceShowId)
-import Data.List (intersperse)
+import Debug.Trace (traceM)
+import Data.List (intersperse, foldl', sortOn)
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.STRef as STM
-import qualified Text.Show.Pretty as Pretty
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Set as Set
+import Data.Maybe (listToMaybe)
 
 queries :: [([FullyQualifiedType], [FullyQualifiedType])]
 queries =
@@ -45,9 +47,6 @@ queries =
     , ["ghc-9.6.2:GHC.Unit.Types.UnitId", "ghc-9.6.2:Language.Haskell.Syntax.Module.Name.ModuleName"]
     )
   ]
-
-f :: BS.ByteString -> String
-f = UTF8.decode . BS.unpack
 
 simpleQuery :: (FullyQualifiedType, FullyQualifiedType)
 simpleQuery =
@@ -64,35 +63,42 @@ main = do
         vertexCount <- DG.vertexCount graph
         edgeCount <- DG.edgeCount graph
         traceM $ unwords ["Built graph with", show vertexCount, "vertices and", show edgeCount, "edges"]
-        -- DEBUG
-        let mk = FullyQualifiedType
-        Just label <- DG.lookupVertex graph $ FullyQualifiedType "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
-        edges <- DG.outgoingEdges graph label
-        let edges' = filter ((== mk "[base-4.18.0.0:GHC.Word.Word8]") . DG.eTo) edges
-        traceM $ Pretty.ppShow $ edges
         pure graph
-  let _ = concat $ ST.runST $ do
-        buildGraph' >>= runQueries
-      res = map (map DG.eMeta) $ ST.runST $ do
+  let !res = map (map DG.eMeta) $ ST.runST $ do
         let (src, dst) = simpleQuery
             maxCount = 30
         traceM $ unwords
           [ "Finding the"
           , show maxCount
-          , "first functions from"
+          , "first paths from"
           , UTF8.decode $ BS.unpack $ unFullyQualifiedType src
           , "to"
           , UTF8.decode $ BS.unpack $ unFullyQualifiedType dst
           ]
-        buildGraph' >>= DG.freeze >>= queryAll f w src dst (\fns -> show (length fns) <> ": " <> disp fns) maxCount
-  putStrLn $ unlines $ map disp res
-  putStrLn $ "Got " <> show (length res) <> " results"
+        buildGraph' >>= DG.freeze >>= queryAll f w src dst (\fns -> show (length fns) <> ": " <> disp' fns) maxCount
+  putStrLn ""
+  putStrLn $ unlines $ map disp' res
+  putStrLn $ "Got " <> show (length $ concat $ map explode res) <> " results"
   where
+    disp' :: [NE.NonEmpty Function] -> String
+    disp' =
+      let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
+      in unlines . map disp . sortOn (fmap sortFun . listToMaybe) . explode
+
     disp :: [Function] -> String
     disp fnLst =
       let dispFun fn =
             _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
-      in UTF8.decode $ BS.unpack $ BS.concat $ intersperse " . " $ map dispFun (reverse fnLst)
+          dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map dispFun . reverse
+      in dispFunLine fnLst
+
+    explode :: [NE.NonEmpty a] -> [[a]]
+    explode lst = do
+      foldl' folder [] lst
+      where
+        folder :: [[a]] -> NE.NonEmpty a -> [[a]]
+        folder [] ne = map (: []) $ NE.toList ne
+        folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
 
     f = (\w' _ -> w' + 1)
     w = 1
@@ -100,6 +106,9 @@ main = do
     excludeTypes = map FullyQualifiedType
       [
       ]
+
+    isIncluded :: Function -> Bool
+    isIncluded = const True
 
     isExcluded :: Function -> Bool
     isExcluded function =
@@ -114,11 +123,13 @@ main = do
 
     buildGraph
       :: [Json.DeclarationMapJson String]
-      -> ST s (DG.Digraph s FullyQualifiedType Function)
+      -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty Function))
     buildGraph =
-      DG.fromEdges
+      DG.fromEdgesMulti
+        . Set.fromList
         . nubOrdOn functionIdentity
         . filter (not . isExcluded)
+        . filter isIncluded
         . concat
         . map declarationMapJsonToFunctions
 
@@ -131,8 +142,10 @@ main = do
           src <- sources
           pure (src, destinations)
 
-
 instance DG.HasWeight Function Double where
+  weight = const 1
+
+instance DG.HasWeight (NE.NonEmpty Function) Double where
   weight = const 1
 
 queryBF
@@ -189,22 +202,21 @@ queryAll
      , Show v
      , Show meta
      , Eq meta
-     , DG.HasWeight meta Double
-     )
-  => (Double -> meta -> Double)
+     , DG.HasWeight meta Double, DG.HasWeight (NE.NonEmpty meta) Double)
+  => (Double -> NE.NonEmpty meta -> Double)
   -> Double
   -> v -- ^ src
   -> v -- ^ dst
-  -> ([meta] -> String)
+  -> ([NE.NonEmpty meta] -> String)
   -> Int -- ^ max number of results
-  -> DG.IDigraph v meta
-  -> ST.ST s [[DG.IdxEdge v meta]]
+  -> DG.IDigraph v (NE.NonEmpty meta)
+  -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
 queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
   resultRef <- STM.newSTRef (0, [])
   go resultRef graph
   reverse . snd <$> STM.readSTRef resultRef
   where
-    getResult :: DG.Digraph s v meta -> ST s (Maybe [DG.IdxEdge v meta])
+    getResult :: DG.Digraph s v (NE.NonEmpty meta) -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
     getResult g = BF.runBF g f w $ BF.bellmanFord src >> BF.pathTo dst
 
     go resultRef ig = do
