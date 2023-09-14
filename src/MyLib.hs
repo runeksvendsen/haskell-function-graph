@@ -26,7 +26,7 @@ import Data.Functor ((<&>))
 import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
-import Control.Monad (forM, forM_, unless)
+import Control.Monad (forM_, unless)
 import Debug.Trace (traceM)
 import Data.List (intersperse, foldl', sortOn)
 import Data.Containers.ListUtils (nubOrdOn)
@@ -35,20 +35,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Maybe (listToMaybe)
 
-queries :: [([FullyQualifiedType], [FullyQualifiedType])]
-queries =
-  [ ( ["[ghc-prim-0.10.0:GHC.Types.Char]"]
-    , [ "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
-      , "bytestring-0.11.4.0:Data.ByteString.Lazy.Internal.ByteString"
-      , "text-2.0.2:Data.Text.Internal.Text"
-      ]
-    )
-  , ( ["ghc-9.6.2:GHC.Core.TyCo.Rep.Type"]
-    , ["ghc-9.6.2:GHC.Unit.Types.UnitId", "ghc-9.6.2:Language.Haskell.Syntax.Module.Name.ModuleName"]
-    )
-  ]
-
-simpleQuery :: (FullyQualifiedType, FullyQualifiedType)
+simpleQuery :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
 simpleQuery =
   ( "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
   , "[ghc-prim-0.10.0:GHC.Types.Char]"
@@ -58,33 +45,27 @@ main :: IO ()
 main = do
   [fileName] <- Env.getArgs
   declarationMapJsonList <- either fail pure =<< A.eitherDecode <$> BSL.readFile fileName
-  let buildGraph' = do
-        graph <- buildGraph declarationMapJsonList
-        vertexCount <- DG.vertexCount graph
-        edgeCount <- DG.edgeCount graph
-        traceM $ unwords ["Built graph with", show vertexCount, "vertices and", show edgeCount, "edges"]
-        pure graph
-  let !res = map (map DG.eMeta) $ ST.runST $ do
-        let (src, dst) = simpleQuery
-            maxCount = 30
-        traceM $ unwords
-          [ "Finding the"
-          , show maxCount
-          , "first paths from"
-          , UTF8.decode $ BS.unpack $ unFullyQualifiedType src
-          , "to"
-          , UTF8.decode $ BS.unpack $ unFullyQualifiedType dst
-          ]
-        buildGraph' >>= DG.freeze >>= queryAll f w src dst (\fns -> show (length fns) <> ": " <> disp' fns) maxCount
+  putStrLn $ unwords
+    [ "Finding the"
+    , show maxCount
+    , "first paths from"
+    , UTF8.decode $ BS.unpack $ unFullyQualifiedType src
+    , "to"
+    , UTF8.decode $ BS.unpack $ unFullyQualifiedType dst
+    ]
+  let !res = ST.runST $ runQueryAll maxCount (src, dst) declarationMapJsonList
   putStrLn ""
   putStrLn $ unlines $ map disp' res
   putStrLn $ "Got " <> show (length $ concat $ map explode res) <> " results"
   where
-    disp' :: [NE.NonEmpty Function] -> String
-    disp' =
-      let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
-      in unlines . map disp . sortOn (fmap sortFun . listToMaybe) . explode
+    maxCount = 30
+    (src, dst) = simpleQuery
 
+disp' :: [NE.NonEmpty Function] -> String
+disp' =
+  let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
+  in unlines . map disp . sortOn (fmap sortFun . listToMaybe) . explode
+  where
     disp :: [Function] -> String
     disp fnLst =
       let dispFun fn =
@@ -92,16 +73,39 @@ main = do
           dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map dispFun . reverse
       in dispFunLine fnLst
 
-    explode :: [NE.NonEmpty a] -> [[a]]
-    explode lst = do
-      foldl' folder [] lst
-      where
-        folder :: [[a]] -> NE.NonEmpty a -> [[a]]
-        folder [] ne = map (: []) $ NE.toList ne
-        folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
+explode :: [NE.NonEmpty a] -> [[a]]
+explode lst = do
+  foldl' folder [] lst
+  where
+    folder :: [[a]] -> NE.NonEmpty a -> [[a]]
+    folder [] ne = map (: []) $ NE.toList ne
+    folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
 
-    f = (\w' _ -> w' + 1)
-    w = 1
+runQueryAll
+  :: Int
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -> [Json.DeclarationMapJson String]
+  -> ST s [[NE.NonEmpty Function]]
+runQueryAll maxCount (src, dst) declarationMapJsonList = do
+  let buildGraph' = do
+        graph <- buildGraph declarationMapJsonList
+        vertexCount <- DG.vertexCount graph
+        edgeCount <- DG.edgeCount graph
+        traceM $ unwords ["Built graph with", show vertexCount, "vertices and", show edgeCount, "edges"]
+        pure graph
+  res <- buildGraph'
+    >>= DG.freeze
+    >>= queryAll weightCombine initialWeight src dst (\fns -> show (length fns) <> ": " <> disp' fns) maxCount
+  pure $ map (map DG.eMeta) res
+  where
+    weightCombine :: Double -> NE.NonEmpty Function -> Double
+    weightCombine w functions =
+      let anyIsFromSrcOrDstPackage = any
+            (\fun -> _function_package fun `elem` map fqtPackage [src, dst])
+            (NE.toList functions)
+      in w + if anyIsFromSrcOrDstPackage then 1 else 2
+
+    initialWeight = 1
 
     excludeTypes = map FullyQualifiedType
       [
@@ -133,35 +137,11 @@ main = do
         . concat
         . map declarationMapJsonToFunctions
 
-    runQueries graph = do
-        BF.runBF graph f w $ forM srcDstCombos $ \(src, destinations) ->
-          queryBF src destinations
-      where
-        srcDstCombos = do
-          (sources, destinations) <- queries
-          src <- sources
-          pure (src, destinations)
-
 instance DG.HasWeight Function Double where
   weight = const 1
 
 instance DG.HasWeight (NE.NonEmpty Function) Double where
   weight = const 1
-
-queryBF
-  :: FullyQualifiedType -- ^ src
-  -> [FullyQualifiedType] -- ^ destinations
-  -> BF.BF s FullyQualifiedType Function
-      [ ( BS.ByteString -- Human-readable function type (e.g. "[ghc-prim-0.10.0:GHC.Types.Char] -> ghc-9.6.2:GHC.Unit.Types.UnitId")
-        , Maybe [Function] -- A path in the graph (if one exists)
-        )
-      ]
-queryBF src destinations = do
-  BF.bellmanFord src
-  results <- mapM BF.pathTo destinations
-  pure $ map (\(dst, res) -> (mkDescr dst, fmap (map DG.eMeta) res)) (zip destinations results)
-  where
-    mkDescr dst = unFullyQualifiedType src <> " -> " <> unFullyQualifiedType dst
 
 -- | A function that takes a single non-function argument and returns a non-function value.
 data Function = Function
@@ -175,6 +155,9 @@ data Function = Function
 --   Guaranteed to not be a function type (ie. will not contain any function arrows).
 newtype FullyQualifiedType = FullyQualifiedType { unFullyQualifiedType :: BS.ByteString }
   deriving (Eq, Ord, Show, Generic, IsString)
+
+fqtPackage :: FullyQualifiedType -> BS.ByteString
+fqtPackage = BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
 
 instance Hashable FullyQualifiedType
 
