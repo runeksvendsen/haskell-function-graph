@@ -8,7 +8,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 module MyLib
-  ( main
+  ( fileReadDeclarationMap
+  , runQueryAll
+  , runPrintQueryAll
+  , spTreeToPaths
+  , Function(..), TypedFunction, UntypedFunction
+  -- * Re-exports
+  , FullyQualifiedType(..)
+  , Json.FunctionType
   ) where
 
 import qualified Json
@@ -19,7 +26,6 @@ import qualified Data.ByteString.Lazy as BSL
 import Control.Monad.ST (ST)
 import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
-import qualified System.Environment as Env
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Functor ((<&>))
@@ -35,36 +41,10 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Maybe (listToMaybe)
 
-strictByteString :: FullyQualifiedType
-strictByteString = FullyQualifiedType
-  "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
-
-lazyText :: FullyQualifiedType
-lazyText = FullyQualifiedType
-  "text-2.0.2:Data.Text.Internal.Lazy.Text" --
-
-string :: FullyQualifiedType
-string = "[ghc-prim-0.10.0:GHC.Types.Char]"
-
-simpleQuery :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
-simpleQuery =
-  ( strictByteString
-  , string
-  )
-
-simpleQuery2 :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
-simpleQuery2 =
-  ( lazyText
-  , strictByteString
-  )
-
-main :: IO ()
-main = do
-  [fileName] <- Env.getArgs
-  declarationMapJsonList <- either fail pure =<< A.eitherDecode <$> BSL.readFile fileName
-  runPrintQueryAll maxCount declarationMapJsonList simpleQuery2
-  where
-    maxCount = 10
+fileReadDeclarationMap
+  :: FilePath
+  -> IO (Either String [Json.DeclarationMapJson String])
+fileReadDeclarationMap fileName = A.eitherDecode <$> BSL.readFile fileName
 
 runPrintQueryAll
   :: Int
@@ -80,31 +60,33 @@ runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
     , "to"
     , UTF8.decode $ BS.unpack $ unFullyQualifiedType dst
     ]
-  let !res = ST.runST $ runQueryAll maxCount (src, dst) declarationMapJsonList
+  let !res = runQueryAll maxCount (src, dst) declarationMapJsonList
   putStrLn ""
   putStrLn $ unlines $ map disp' res
-  putStrLn $ "Got " <> show (length $ concat $ map explode res) <> " results"
+  putStrLn $ "Got " <> show (length $ concat $ map spTreeToPaths res) <> " results"
   where
-    disp' :: [NE.NonEmpty Function] -> String
+    disp' :: [NE.NonEmpty TypedFunction] -> String
     disp' =
-      unlines . map renderPath . sortOn (sum . map (functionWeight (src, dst))) . explode
+      unlines . map renderPath . sortOn (sum . map (functionWeight (src, dst))) . spTreeToPaths
 
-renderPath :: [Function] -> String
+-- | Function list is in order of application, e.g. @g . f@ is @[f, g]@.
+renderPath :: [Function typeSig] -> String
 renderPath fnLst =
-  let dispFun fn =
-        _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
-      dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map dispFun . reverse
+  let dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map renderFunction . reverse
   in dispFunLine fnLst
 
-explode :: [NE.NonEmpty a] -> [[a]]
-explode lst = do
+-- | Convert a shortest path tree into a list of shortests paths.
+--
+-- The 'NonEmpty' represents one or more edges between the same two nodes.
+spTreeToPaths :: [NE.NonEmpty edge] -> [[edge]]
+spTreeToPaths lst = do
   foldl' folder [] lst
   where
     folder :: [[a]] -> NE.NonEmpty a -> [[a]]
     folder [] ne = map (: []) $ NE.toList ne
     folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
 
-functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> Function -> Double
+functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> TypedFunction -> Double
 functionWeight (src, dst) function =
   let countFromSrcOrDstPackage = length $ filter
         (== (_function_package function))
@@ -115,8 +97,16 @@ runQueryAll
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
   -> [Json.DeclarationMapJson String]
-  -> ST s [[NE.NonEmpty Function]]
-runQueryAll maxCount (src, dst) declarationMapJsonList = do
+  -> [[NE.NonEmpty TypedFunction]]
+runQueryAll maxCount (src, dst) declarationMapJsonList =
+  ST.runST $ runQueryAllST maxCount (src, dst) declarationMapJsonList
+
+runQueryAllST
+  :: Int
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -> [Json.DeclarationMapJson String]
+  -> ST s [[NE.NonEmpty TypedFunction]]
+runQueryAllST maxCount (src, dst) declarationMapJsonList = do
   let buildGraph' = do
         graph <- buildGraph declarationMapJsonList
         vertexCount <- DG.vertexCount graph
@@ -129,13 +119,18 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
   let res' = map (map DG.eMeta) res
   pure res'
   where
-    dispFun fns = show (length fns) <> ": " <> disp' fns
+    debug = False
 
-    edgeWeightNE :: NE.NonEmpty Function -> Double
+    dispFun fns =
+      if debug
+        then show (length fns) <> ": " <> disp' fns
+        else ""
+
+    edgeWeightNE :: NE.NonEmpty TypedFunction -> Double
     edgeWeightNE functions =
       minimum $ map (functionWeight (src, dst)) (NE.toList functions)
 
-    weightCombine :: Double -> NE.NonEmpty Function -> Double
+    weightCombine :: Double -> NE.NonEmpty TypedFunction -> Double
     weightCombine w functions = w + edgeWeightNE functions
 
     initialWeight = 1
@@ -161,7 +156,7 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
 
     isExcludedPackage = (`elem` excludePackages)
 
-    isExcluded :: Function -> Bool
+    isExcluded :: TypedFunction -> Bool
     isExcluded function =
       DG.fromNode function `elem` excludeTypes
         || DG.toNode function `elem` excludeTypes
@@ -173,14 +168,14 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
       , _function_package fn
       )
 
-    disp' :: [NE.NonEmpty Function] -> String
+    disp' :: [NE.NonEmpty (Function typeSig)] -> String
     disp' =
       let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
-      in unlines . map renderPath . sortOn (fmap sortFun . listToMaybe) . explode
+      in unlines . map renderPath . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
 
     buildGraph
       :: [Json.DeclarationMapJson String]
-      -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty Function))
+      -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
     buildGraph =
       DG.fromEdgesMulti
         . Set.fromList
@@ -190,19 +185,39 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
         . map declarationMapJsonToFunctions
         . filter (not . isExcludedPackage . Json.declarationMapJson_package)
 
-instance DG.HasWeight Function Double where
+instance DG.HasWeight (Function typeSig) Double where
   weight = const 1
 
-instance DG.HasWeight (NE.NonEmpty Function) Double where
+instance DG.HasWeight (NE.NonEmpty (Function typeSig)) Double where
   weight = const 1
 
 -- | A function that takes a single non-function argument and returns a non-function value.
-data Function = Function
+--
+-- Generic over type signature.
+data Function typeSig = Function
   { _function_name :: BS.ByteString -- ^ e.g. "pack"
   , _function_module :: BS.ByteString -- ^ e.g. "Data.Text"
   , _function_package :: BS.ByteString -- ^ e.g. "text-1.2.4.1"
-  , _function_typeSig :: Json.FunctionType FullyQualifiedType
+  , _function_typeSig :: typeSig
   } deriving (Eq, Show, Ord)
+
+instance Functor Function where
+  fmap f fn = fn { _function_typeSig = f $ _function_typeSig fn }
+
+-- | Produce e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
+renderFunction :: Function typeSig -> BS.ByteString
+renderFunction fn =
+  _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
+
+-- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'
+parseFunction :: BS.ByteString -> Maybe UntypedFunction
+parseFunction str = error "TODO"
+
+-- | A typed 'Function'
+type TypedFunction = Function (Json.FunctionType FullyQualifiedType)
+
+-- | A untyped 'Function'
+type UntypedFunction = Function ()
 
 -- | E.g. "base-4.18.0.0:GHC.Ptr.Ptr zstd-0.1.3.0:Codec.Compression.Zstd.FFI.Types.DDict".
 --   Guaranteed to not be a function type (ie. will not contain any function arrows).
@@ -216,7 +231,7 @@ instance Hashable FullyQualifiedType
 
 declarationMapJsonToFunctions
   :: Json.DeclarationMapJson String
-  -> [Function]
+  -> [TypedFunction]
 declarationMapJsonToFunctions dmj = concat $
   Map.toList moduleDeclarations <&> \(moduleName, nameMap) ->
     Map.toList nameMap <&> \(functionName, functionType) ->
@@ -226,7 +241,7 @@ declarationMapJsonToFunctions dmj = concat $
     dmj' = Json.fmapDeclarationMapJson (BS.pack . UTF8.encode) dmj
     package = Json.declarationMapJson_package dmj'
 
-instance DG.DirectedEdge Function FullyQualifiedType Function where
+instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   fromNode = Json.functionType_arg . _function_typeSig
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
