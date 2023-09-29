@@ -1,0 +1,46 @@
+name: Build & test in nix-shell
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build_test_nix_shell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v17
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://cache.iog.io
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+            system-features = benchmark big-parallel kvm nixos-test
+
+      - name: Cache cabal stuff
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            dist-newstyle
+          key: ${{ runner.os }}-${{ hashFiles('**/*.cabal', '**/cabal.project', '**/cabal.project.freeze') }}
+          restore-keys: ${{ runner.os }}-
+
+      - name: Test nix-shell
+        run: nix-shell --run "echo 'it works \o/'"
+
+      - name: Run 'cabal update'
+        run: nix-shell --run "cabal update"
+
+      - name: Build library
+        run: nix-shell --run "cabal build lib:function-graph"
+
+      - name: Build tests
+        run: nix-shell --run "cabal build test-suite:function-graph-test"
+
+      - name: Run tests
+        run: nix-shell --run "cabal test"
