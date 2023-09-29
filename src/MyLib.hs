@@ -12,6 +12,8 @@ module MyLib
   , runQueryAll
   , runPrintQueryAll
   , spTreeToPaths
+  , renderPathBS, renderPath
+  , renderFunction, parseFunction
   , Function(..), TypedFunction, UntypedFunction
   -- * Re-exports
   , FullyQualifiedType(..)
@@ -27,6 +29,7 @@ import Control.Monad.ST (ST)
 import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.Map as Map
 import Data.Functor ((<&>))
 import qualified Codec.Binary.UTF8.String as UTF8
@@ -62,18 +65,21 @@ runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
     ]
   let !res = runQueryAll maxCount (src, dst) declarationMapJsonList
   putStrLn ""
-  putStrLn $ unlines $ map disp' res
-  putStrLn $ "Got " <> show (length $ concat $ map spTreeToPaths res) <> " results"
+  putStrLn $ disp' res
+  putStrLn $ "Got " <> show (length $ concat res) <> " results"
   where
-    disp' :: [NE.NonEmpty TypedFunction] -> String
-    disp' =
-      unlines . map renderPath . sortOn (sum . map (functionWeight (src, dst))) . spTreeToPaths
+    disp' = unlines . map renderPath
 
 -- | Function list is in order of application, e.g. @g . f@ is @[f, g]@.
-renderPath :: [Function typeSig] -> String
-renderPath fnLst =
-  let dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map renderFunction . reverse
+renderPathBS :: [Function typeSig] -> BS.ByteString
+renderPathBS fnLst =
+  let dispFunLine = BS.concat . intersperse " . " . map renderFunction . reverse
   in dispFunLine fnLst
+
+-- | Same as 'renderPathBS' but returns a 'String'
+renderPath :: [Function typeSig] -> String
+renderPath =
+  UTF8.decode . BS.unpack . renderPathBS
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -87,17 +93,18 @@ spTreeToPaths lst = do
     folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
 
 functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> TypedFunction -> Double
-functionWeight (src, dst) function =
-  let countFromSrcOrDstPackage = length $ filter
-        (== (_function_package function))
-        (map fqtPackage [src, dst])
-  in 1 / (realToFrac $ countFromSrcOrDstPackage + 1)
+functionWeight (src, dst) function
+  | srcPkg == fnPkg || dstPkg == fnPkg = 0
+  | otherwise = 1
+  where
+    fnPkg = _function_package function
+    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
 
 runQueryAll
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
   -> [Json.DeclarationMapJson String]
-  -> [[NE.NonEmpty TypedFunction]]
+  -> [[TypedFunction]]
 runQueryAll maxCount (src, dst) declarationMapJsonList =
   ST.runST $ runQueryAllST maxCount (src, dst) declarationMapJsonList
 
@@ -105,7 +112,7 @@ runQueryAllST
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
   -> [Json.DeclarationMapJson String]
-  -> ST s [[NE.NonEmpty TypedFunction]]
+  -> ST s [[TypedFunction]]
 runQueryAllST maxCount (src, dst) declarationMapJsonList = do
   let buildGraph' = do
         graph <- buildGraph declarationMapJsonList
@@ -117,7 +124,10 @@ runQueryAllST maxCount (src, dst) declarationMapJsonList = do
     >>= DG.freeze
     >>= queryAll weightCombine initialWeight src dst dispFun maxCount
   let res' = map (map DG.eMeta) res
-  pure res'
+  pure
+    $ sortOn (\path -> (sum $ map (functionWeight (src, dst)) path, length path)) -- (sum weights, length path)
+    $ concat
+    $ map spTreeToPaths res'
   where
     debug = False
 
@@ -211,7 +221,26 @@ renderFunction fn =
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'
 parseFunction :: BS.ByteString -> Maybe UntypedFunction
-parseFunction str = error "TODO"
+parseFunction bs =
+  case BSC8.split ':' bs of
+    [pkg, moduleAndName] -> do
+      (module', name) <- spanEndNonEmpty (not . (== '.')) moduleAndName
+      pure $
+        Function
+          { _function_name = name
+          , _function_module = module'
+          , _function_package = pkg
+          , _function_typeSig = ()
+          }
+    _ -> Nothing
+  where
+    -- A version of 'spanEnd' that does not return the empty ByteString
+    spanEndNonEmpty f bs' =
+      let (a, b) = BSC8.spanEnd f bs'
+          result
+            | BS.null a || BS.null b = Nothing
+            | otherwise = Just (a, b)
+      in result
 
 -- | A typed 'Function'
 type TypedFunction = Function (Json.FunctionType FullyQualifiedType)

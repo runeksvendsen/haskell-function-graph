@@ -46,6 +46,4 @@ test-suite function-graph-test
     , hspec
     , hspec-expectations
     , hspec-expectations-pretty-diff
-    , tasty
-    , tasty-hunit
   default-language: Haskell2010

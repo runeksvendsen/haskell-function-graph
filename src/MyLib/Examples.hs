@@ -15,14 +15,14 @@ lazyText = FullyQualifiedType
 string :: FullyQualifiedType
 string = "[ghc-prim-0.10.0:GHC.Types.Char]"
 
-simpleQuery :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
-simpleQuery =
+strictBytestring2String :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
+strictBytestring2String =
   ( strictByteString
   , string
   )
 
-simpleQuery2 :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
-simpleQuery2 =
+lazyText2StrictBytestring :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
+lazyText2StrictBytestring =
   ( lazyText
   , strictByteString
   )
