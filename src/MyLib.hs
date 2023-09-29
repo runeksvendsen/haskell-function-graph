@@ -35,16 +35,43 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Maybe (listToMaybe)
 
+strictByteString :: FullyQualifiedType
+strictByteString = FullyQualifiedType
+  "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
+
+lazyText :: FullyQualifiedType
+lazyText = FullyQualifiedType
+  "text-2.0.2:Data.Text.Internal.Lazy.Text" --
+
+string :: FullyQualifiedType
+string = "[ghc-prim-0.10.0:GHC.Types.Char]"
+
 simpleQuery :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
 simpleQuery =
-  ( "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
-  , "[ghc-prim-0.10.0:GHC.Types.Char]"
+  ( strictByteString
+  , string
+  )
+
+simpleQuery2 :: (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
+simpleQuery2 =
+  ( lazyText
+  , strictByteString
   )
 
 main :: IO ()
 main = do
   [fileName] <- Env.getArgs
   declarationMapJsonList <- either fail pure =<< A.eitherDecode <$> BSL.readFile fileName
+  runPrintQueryAll maxCount declarationMapJsonList simpleQuery2
+  where
+    maxCount = 10
+
+runPrintQueryAll
+  :: Int
+  -> [Json.DeclarationMapJson String]
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -> IO ()
+runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
   putStrLn $ unwords
     [ "Finding the"
     , show maxCount
@@ -58,20 +85,16 @@ main = do
   putStrLn $ unlines $ map disp' res
   putStrLn $ "Got " <> show (length $ concat $ map explode res) <> " results"
   where
-    maxCount = 30
-    (src, dst) = simpleQuery
+    disp' :: [NE.NonEmpty Function] -> String
+    disp' =
+      unlines . map renderPath . sortOn (sum . map (functionWeight (src, dst))) . explode
 
-disp' :: [NE.NonEmpty Function] -> String
-disp' =
-  let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
-  in unlines . map disp . sortOn (fmap sortFun . listToMaybe) . explode
-  where
-    disp :: [Function] -> String
-    disp fnLst =
-      let dispFun fn =
-            _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
-          dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map dispFun . reverse
-      in dispFunLine fnLst
+renderPath :: [Function] -> String
+renderPath fnLst =
+  let dispFun fn =
+        _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
+      dispFunLine = UTF8.decode . BS.unpack . BS.concat . intersperse " . " . map dispFun . reverse
+  in dispFunLine fnLst
 
 explode :: [NE.NonEmpty a] -> [[a]]
 explode lst = do
@@ -80,6 +103,13 @@ explode lst = do
     folder :: [[a]] -> NE.NonEmpty a -> [[a]]
     folder [] ne = map (: []) $ NE.toList ne
     folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
+
+functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> Function -> Double
+functionWeight (src, dst) function =
+  let countFromSrcOrDstPackage = length $ filter
+        (== (_function_package function))
+        (map fqtPackage [src, dst])
+  in 1 / (realToFrac $ countFromSrcOrDstPackage + 1)
 
 runQueryAll
   :: Int
@@ -95,15 +125,18 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
         pure graph
   res <- buildGraph'
     >>= DG.freeze
-    >>= queryAll weightCombine initialWeight src dst (\fns -> show (length fns) <> ": " <> disp' fns) maxCount
-  pure $ map (map DG.eMeta) res
+    >>= queryAll weightCombine initialWeight src dst dispFun maxCount
+  let res' = map (map DG.eMeta) res
+  pure res'
   where
+    dispFun fns = show (length fns) <> ": " <> disp' fns
+
+    edgeWeightNE :: NE.NonEmpty Function -> Double
+    edgeWeightNE functions =
+      minimum $ map (functionWeight (src, dst)) (NE.toList functions)
+
     weightCombine :: Double -> NE.NonEmpty Function -> Double
-    weightCombine w functions =
-      let anyIsFromSrcOrDstPackage = any
-            (\fun -> _function_package fun `elem` map fqtPackage [src, dst])
-            (NE.toList functions)
-      in w + if anyIsFromSrcOrDstPackage then 1 else 2
+    weightCombine w functions = w + edgeWeightNE functions
 
     initialWeight = 1
 
@@ -111,19 +144,39 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
       [
       ]
 
-    isIncluded :: Function -> Bool
-    isIncluded = const True
+    -- TODO: no version number
+    excludePackages =
+      [ "basic-prelude-0.7.0"
+      , "incipit-base-0.5.1.0"
+      , "incipit-core-0.5.1.0"
+      , "rebase-1.20"
+      , "rerebase-1.20"
+      , "rio-0.1.22.0"
+      , "shakers-0.0.50" -- NOTE: re-exports all of basic-prelude:BasicPrelude
+      ]
+
+    excludeModulePatterns =
+      [ "Internal"
+      ]
+
+    isExcludedPackage = (`elem` excludePackages)
 
     isExcluded :: Function -> Bool
     isExcluded function =
       DG.fromNode function `elem` excludeTypes
         || DG.toNode function `elem` excludeTypes
+        || any (`BS.isInfixOf` _function_module function) excludeModulePatterns
 
     functionIdentity fn =
       ( _function_name fn
       , _function_module fn
       , _function_package fn
       )
+
+    disp' :: [NE.NonEmpty Function] -> String
+    disp' =
+      let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
+      in unlines . map renderPath . sortOn (fmap sortFun . listToMaybe) . explode
 
     buildGraph
       :: [Json.DeclarationMapJson String]
@@ -133,9 +186,9 @@ runQueryAll maxCount (src, dst) declarationMapJsonList = do
         . Set.fromList
         . nubOrdOn functionIdentity
         . filter (not . isExcluded)
-        . filter isIncluded
         . concat
         . map declarationMapJsonToFunctions
+        . filter (not . isExcludedPackage . Json.declarationMapJson_package)
 
 instance DG.HasWeight Function Double where
   weight = const 1
@@ -212,7 +265,8 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
         Just [] -> pure () -- src == dst
         Just path -> do
           STM.modifySTRef' resultRef $ \(!count', !res') -> (count' + 1, path : res')
-          traceM $ disp (map DG.eMeta path)
+          let traceStr = disp (map DG.eMeta path)
+          unless (null traceStr) $ traceM traceStr
           forM_ path $ \edge -> do
             ifMissingResults $ do
               g' <- DG.thaw ig
