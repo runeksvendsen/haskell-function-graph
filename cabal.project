@@ -1,7 +1,7 @@
 packages:
     *.cabal
 
-with-compiler: /nix/store/cmh3w1792vnss54q94bgqdlkrlph7p8i-ghc-8.10.7/bin/ghc
+with-compiler: ghc-8.10.7
 
 source-repository-package
     type: git
