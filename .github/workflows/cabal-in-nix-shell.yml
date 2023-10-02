@@ -43,4 +43,4 @@ jobs:
         run: nix-shell --run "cabal build test-suite:function-graph-test"
 
       - name: Run tests
-        run: nix-shell --run "cabal test"
+        run: nix-shell --run "cabal test --test-show-details=direct"
