@@ -12,7 +12,7 @@ module MyLib
   , runQueryAll
   , runPrintQueryAll
   , spTreeToPaths
-  , renderPathBS, renderPath
+  , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction
   , Function(..), TypedFunction, UntypedFunction
   -- * Re-exports
@@ -30,12 +30,13 @@ import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
+import qualified Data.ByteString.Search as Search
 import qualified Data.Map as Map
 import Data.Functor ((<&>))
 import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_, unless, guard)
 import Debug.Trace (traceM)
 import Data.List (intersperse, foldl', sortOn)
 import Data.Containers.ListUtils (nubOrdOn)
@@ -68,18 +69,7 @@ runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
   putStrLn $ disp' res
   putStrLn $ "Got " <> show (length $ concat res) <> " results"
   where
-    disp' = unlines . map renderPath
-
--- | Function list is in order of application, e.g. @g . f@ is @[f, g]@.
-renderPathBS :: [Function typeSig] -> BS.ByteString
-renderPathBS fnLst =
-  let dispFunLine = BS.concat . intersperse " . " . map renderFunction . reverse
-  in dispFunLine fnLst
-
--- | Same as 'renderPathBS' but returns a 'String'
-renderPath :: [Function typeSig] -> String
-renderPath =
-  UTF8.decode . BS.unpack . renderPathBS
+    disp' = unlines . map renderComposedFunctionsStr
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -181,7 +171,7 @@ runQueryAllST maxCount (src, dst) declarationMapJsonList = do
     disp' :: [NE.NonEmpty (Function typeSig)] -> String
     disp' =
       let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
-      in unlines . map renderPath . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
+      in unlines . map renderComposedFunctionsStr . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
 
     buildGraph
       :: [Json.DeclarationMapJson String]
@@ -214,6 +204,26 @@ data Function typeSig = Function
 instance Functor Function where
   fmap f fn = fn { _function_typeSig = f $ _function_typeSig fn }
 
+-- | Render composed functions.
+--
+-- Function list is in order of application, e.g. @g . f@ is @[f, g]@.
+renderComposedFunctions :: [Function typeSig] -> BS.ByteString
+renderComposedFunctions fnLst =
+  let dispFunLine = BS.concat . intersperse " . " . map renderFunction . reverse
+  in dispFunLine fnLst
+
+-- | Same as 'renderComposedFunctions' but returns a 'String'
+renderComposedFunctionsStr :: [Function typeSig] -> String
+renderComposedFunctionsStr =
+  UTF8.decode . BS.unpack . renderComposedFunctions
+
+-- | Parse the output of 'renderComposedFunctions'
+parseComposedFunctions :: BS.ByteString -> Maybe (NE.NonEmpty UntypedFunction)
+parseComposedFunctions bs = do
+  bsFunctionList <- NE.nonEmpty $ reverse $ Search.split " . " bs
+  let parsedMaybeFunctions = NE.map parseFunction bsFunctionList
+  sequence parsedMaybeFunctions
+
 -- | Produce e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
 renderFunction :: Function typeSig -> BS.ByteString
 renderFunction fn =
@@ -224,11 +234,13 @@ parseFunction :: BS.ByteString -> Maybe UntypedFunction
 parseFunction bs =
   case BSC8.split ':' bs of
     [pkg, moduleAndName] -> do
-      (module', name) <- spanEndNonEmpty (not . (== '.')) moduleAndName
+      (moduleNameWithSuffix, name) <- spanEndNonEmpty (not . (== '.')) moduleAndName
+      moduleName <- BS.stripSuffix "." moduleNameWithSuffix
+      guard $ not (BS.null moduleName)
       pure $
         Function
           { _function_name = name
-          , _function_module = module'
+          , _function_module = moduleName
           , _function_package = pkg
           , _function_typeSig = ()
           }

@@ -24,6 +24,7 @@ library
                     , containers
                     , utf8-string
                     , pretty-show
+                    , stringsearch
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -43,6 +44,8 @@ test-suite function-graph-test
   build-depends:
       base
     , function-graph
+    , bytestring
+    , containers
     , hspec
     , hspec-expectations
     , hspec-expectations-pretty-diff

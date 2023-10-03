@@ -6,9 +6,14 @@ module Main where
 
 import qualified MyLib
 import qualified MyLib.Examples as Examples
-import Test.Hspec.Expectations.Pretty (shouldContain)
+import Test.Hspec.Expectations.Pretty (expectationFailure)
 import Data.Functor (void)
 import qualified Test.Hspec as HSpec
+import Data.Maybe (fromMaybe)
+import qualified Data.ByteString.Char8 as BSC8
+import qualified Data.List.NonEmpty as NE
+import Control.Monad (unless)
+import qualified Data.Set as Set
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -22,30 +27,31 @@ main = do
       HSpec.describe ("Expected result contained in top " <> show maxCount <> " query results") $ do
         HSpec.it "strict ByteString to String" $ do
           getResults' Examples.strictBytestring2String
-            `shouldContain`
-              [ PPFunctions
-                [ MyLib.Function "unpack" "Data.ByteString.Char8" "bytestring-0.11.4.0" ()
+            `isSupersetOf`
+              fns
+                [ "bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
                 ]
-              ]
         HSpec.it "lazy Text to strict ByteString" $ do
           getResults' Examples.lazyText2StrictBytestring
-            `shouldContain`
-              [ PPFunctions
-                [ MyLib.Function "toStrict" "Data.Text.Lazy" "text-2.0.2" ()
-                , MyLib.Function "encodeUtf8" "Data.Text.Encoding" "text-2.0.2" ()
+            `isSupersetOf`
+              fns
+                [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
+                , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
+                , "text-2.0.2:Data.Text.Encoding.encodeUtf32LE . text-2.0.2:Data.Text.Lazy.toStrict"
+                , "text-2.0.2:Data.Text.Encoding.encodeUtf8 . text-2.0.2:Data.Text.Lazy.toStrict"
+                , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf16LE"
+                , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
+                , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
                 ]
-              ]
-            -- TODO: use 'parseFunction' to assert on all of the following:
-              -- bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack
-              -- text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict
-              -- text-2.0.2:Data.Text.Encoding.encodeUtf32LE . text-2.0.2:Data.Text.Lazy.toStrict
-              -- text-2.0.2:Data.Text.Encoding.encodeUtf8 . text-2.0.2:Data.Text.Lazy.toStrict
-              -- bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf16LE
-              -- bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE
-              -- bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8
   where
-    maxCount = 10
+    maxCount = 11
     maxCountSpTrees = maxCount
+
+    fns lst = map (PPFunctions . NE.toList . fn) lst
+
+    fn bs = fromMaybe
+      (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
+      (MyLib.parseComposedFunctions bs)
 
     getResults graphData (src, dst) =
       let res = MyLib.runQueryAll maxCountSpTrees (src, dst) graphData
@@ -56,4 +62,16 @@ newtype PPFunctions = PPFunctions { unPPFunctions :: [MyLib.Function ()] }
   deriving (Eq, Ord)
 
 instance Show PPFunctions where
-  show = MyLib.renderPath . unPPFunctions
+  show = MyLib.renderComposedFunctionsStr . unPPFunctions
+
+isSupersetOf :: (Show a, Ord a) => [a] -> [a] -> IO ()
+isSupersetOf superSetLst subSetLst =
+  let superSet = Set.fromList superSetLst
+      subSet = Set.fromList subSetLst
+      errMsg = unwords
+        [ show superSetLst
+        , "does not contain"
+        , show $ Set.toList $ Set.difference subSet (Set.intersection superSet subSet)
+        ]
+  in unless (subSet `Set.isSubsetOf` superSet) $
+    expectationFailure errMsg
