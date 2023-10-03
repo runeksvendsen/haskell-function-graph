@@ -6,13 +6,12 @@ module Main where
 
 import qualified MyLib
 import qualified MyLib.Examples as Examples
-import Test.Hspec.Expectations.Pretty (expectationFailure)
+import Test.Hspec.Expectations.Pretty (shouldBe)
 import Data.Functor (void)
 import qualified Test.Hspec as HSpec
 import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
-import Control.Monad (unless)
 import qualified Data.Set as Set
 
 testDataFileName :: FilePath
@@ -68,10 +67,4 @@ isSupersetOf :: (Show a, Ord a) => [a] -> [a] -> IO ()
 isSupersetOf superSetLst subSetLst =
   let superSet = Set.fromList superSetLst
       subSet = Set.fromList subSetLst
-      errMsg = unwords
-        [ show superSetLst
-        , "does not contain"
-        , show $ Set.toList $ Set.difference subSet (Set.intersection superSet subSet)
-        ]
-  in unless (subSet `Set.isSubsetOf` superSet) $
-    expectationFailure errMsg
+  in Set.intersection superSet subSet `shouldBe` subSet
