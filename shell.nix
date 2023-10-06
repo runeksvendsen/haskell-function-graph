@@ -13,8 +13,8 @@ in
   pkgs.mkShell {
     nativeBuildInputs = [
       pkgs.haskell.compiler.ghc810
-      # pkgs.haskell.compiler.ghc865Binary
       release-21-05.cabal-install
+      pkgs.zlib
       pkgs.git
     ];
 }
