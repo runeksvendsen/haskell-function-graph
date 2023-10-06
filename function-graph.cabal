@@ -32,8 +32,10 @@ library function-graph-server
     import:           warnings
     exposed-modules:  Server
                       Server.Api
+                      Server.Pages.Root
     build-depends:    base
                     , lucid
+                    , servant-lucid
                     , servant
                     , servant-server
                     , wai
@@ -45,7 +47,7 @@ executable server
     import:           warnings
     main-is:          Main.hs
     hs-source-dirs:   app/server
-    build-depends:    base, function-graph:function-graph-server
+    build-depends:    base, function-graph-server
     default-language: Haskell2010
 
 executable function-graph
