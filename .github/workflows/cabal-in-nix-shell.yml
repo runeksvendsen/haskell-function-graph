@@ -36,11 +36,20 @@ jobs:
       - name: Run 'cabal update'
         run: nix-shell --run "cabal update"
 
-      - name: Build library
+      - name: Build 'function-graph' library
         run: nix-shell --run "cabal build lib:function-graph"
 
-      - name: Build tests
+      - name: Build 'function-graph-server' library
+        run: nix-shell --run "cabal build lib:function-graph-server"
+
+      - name: Build 'function-graph-test' test suite
         run: nix-shell --run "cabal build test-suite:function-graph-test"
 
-      - name: Run tests
-        run: nix-shell --run "cabal test --test-show-details=direct"
+      - name: Run 'function-graph-test' test suite
+        run: nix-shell --run "cabal test test-suite:function-graph-test --test-show-details=direct"
+
+      - name: Build 'function-graph' executable
+        run: nix-shell --run "cabal exe:function-graph"
+
+      - name: Build 'server' executable
+        run: nix-shell --run "cabal exe:server"
