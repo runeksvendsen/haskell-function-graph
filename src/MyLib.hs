@@ -9,6 +9,7 @@
 {-# LANGUAGE BangPatterns #-}
 module MyLib
   ( fileReadDeclarationMap
+  , buildGraph
   , runQueryAll
   , runPrintQueryAll
   , spTreeToPaths
@@ -64,7 +65,7 @@ runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
     , "to"
     , UTF8.decode $ BS.unpack $ unFullyQualifiedType dst
     ]
-  let !res = runQueryAll maxCount (src, dst) declarationMapJsonList
+  let !res = runQueryAll maxCount (src, dst) (ST.runST $ buildGraph declarationMapJsonList)
   putStrLn ""
   putStrLn $ disp' res
   putStrLn $ "Got " <> show (length $ concat res) <> " results"
@@ -93,48 +94,23 @@ functionWeight (src, dst) function
 runQueryAll
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
-  -> [Json.DeclarationMapJson String]
+  -> (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> [[TypedFunction]]
-runQueryAll maxCount (src, dst) declarationMapJsonList =
-  ST.runST $ runQueryAllST maxCount (src, dst) declarationMapJsonList
+runQueryAll maxCount (src, dst) graph =
+  ST.runST $ runQueryAllST maxCount (src, dst) graph
 
-runQueryAllST
-  :: Int
-  -> (FullyQualifiedType, FullyQualifiedType)
-  -> [Json.DeclarationMapJson String]
-  -> ST s [[TypedFunction]]
-runQueryAllST maxCount (src, dst) declarationMapJsonList = do
-  let buildGraph' = do
-        graph <- buildGraph declarationMapJsonList
+buildGraph
+  :: [Json.DeclarationMapJson String]
+  -> ST s (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
+buildGraph declarationMapJsonList = do
+  let buildGraph'' = do
+        graph <- buildGraph' declarationMapJsonList
         vertexCount <- DG.vertexCount graph
         edgeCount <- DG.edgeCount graph
         traceM $ unwords ["Built graph with", show vertexCount, "vertices and", show edgeCount, "edges"]
         pure graph
-  res <- buildGraph'
-    >>= DG.freeze
-    >>= queryAll weightCombine initialWeight src dst dispFun maxCount
-  let res' = map (map DG.eMeta) res
-  pure
-    $ sortOn (\path -> (sum $ map (functionWeight (src, dst)) path, length path)) -- (sum weights, length path)
-    $ concat
-    $ map spTreeToPaths res'
+  buildGraph'' >>= DG.freeze
   where
-    debug = False
-
-    dispFun fns =
-      if debug
-        then show (length fns) <> ": " <> disp' fns
-        else ""
-
-    edgeWeightNE :: NE.NonEmpty TypedFunction -> Double
-    edgeWeightNE functions =
-      minimum $ map (functionWeight (src, dst)) (NE.toList functions)
-
-    weightCombine :: Double -> NE.NonEmpty TypedFunction -> Double
-    weightCombine w functions = w + edgeWeightNE functions
-
-    initialWeight = 1
-
     excludeTypes = map FullyQualifiedType
       [
       ]
@@ -168,15 +144,10 @@ runQueryAllST maxCount (src, dst) declarationMapJsonList = do
       , _function_package fn
       )
 
-    disp' :: [NE.NonEmpty (Function typeSig)] -> String
-    disp' =
-      let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
-      in unlines . map renderComposedFunctionsStr . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
-
-    buildGraph
+    buildGraph'
       :: [Json.DeclarationMapJson String]
       -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
-    buildGraph =
+    buildGraph' =
       DG.fromEdgesMulti
         . Set.fromList
         . nubOrdOn functionIdentity
@@ -184,6 +155,40 @@ runQueryAllST maxCount (src, dst) declarationMapJsonList = do
         . concat
         . map declarationMapJsonToFunctions
         . filter (not . isExcludedPackage . Json.declarationMapJson_package)
+
+runQueryAllST
+  :: Int
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -> (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
+  -> ST s [[TypedFunction]]
+runQueryAllST maxCount (src, dst) graph = do
+  res <- queryAll weightCombine initialWeight src dst dispFun maxCount graph
+  let res' = map (map DG.eMeta) res
+  pure
+    $ sortOn (\path -> (sum $ map (functionWeight (src, dst)) path, length path)) -- (sum weights, length path)
+    $ concat
+    $ map spTreeToPaths res'
+  where
+    debug = False
+
+    dispFun fns =
+      if debug
+        then show (length fns) <> ": " <> disp' fns
+        else ""
+
+    edgeWeightNE :: NE.NonEmpty TypedFunction -> Double
+    edgeWeightNE functions =
+      minimum $ map (functionWeight (src, dst)) (NE.toList functions)
+
+    weightCombine :: Double -> NE.NonEmpty TypedFunction -> Double
+    weightCombine w functions = w + edgeWeightNE functions
+
+    initialWeight = 1
+
+    disp' :: [NE.NonEmpty (Function typeSig)] -> String
+    disp' =
+      let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
+      in unlines . map renderComposedFunctionsStr . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
 
 instance DG.HasWeight (Function typeSig) Double where
   weight = const 1

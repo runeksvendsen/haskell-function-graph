@@ -5,7 +5,7 @@
 module Main where
 
 import qualified MyLib
-import qualified MyLib.Examples as Examples
+import MyLib.Examples
 import Test.Hspec.Expectations.Pretty (shouldBe)
 import Data.Functor (void)
 import qualified Test.Hspec as HSpec
@@ -13,6 +13,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
+import qualified Control.Monad.ST as ST
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -20,40 +21,64 @@ testDataFileName = "data/all3.json"
 main :: IO ()
 main = do
   graphData <- either fail pure =<< MyLib.fileReadDeclarationMap testDataFileName
-  let getResults' = map (PPFunctions . map void) . getResults graphData
+  let !graph = ST.runST $ MyLib.buildGraph graphData
+  let getResults' maxCount = map (PPFunctions . map void) . getResults maxCount graph
+      testCase maxCount (from, to) expectedList =
+        HSpec.it (unwords [snd from, "to", snd to, "(max:", show maxCount <> ")"]) $ do
+          getResults' maxCount (fst from, fst to)
+            `isSupersetOf`
+              fns expectedList
   HSpec.hspec $
     HSpec.describe "Unit tests" $ do
-      HSpec.describe ("Expected result contained in top " <> show maxCount <> " query results") $ do
-        HSpec.it "strict ByteString to String" $ do
-          getResults' Examples.strictBytestring2String
-            `isSupersetOf`
-              fns
-                [ "bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
-                ]
-        HSpec.it "lazy Text to strict ByteString" $ do
-          getResults' Examples.lazyText2StrictBytestring
-            `isSupersetOf`
-              fns
-                [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
-                , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
-                , "text-2.0.2:Data.Text.Encoding.encodeUtf32LE . text-2.0.2:Data.Text.Lazy.toStrict"
-                , "text-2.0.2:Data.Text.Encoding.encodeUtf8 . text-2.0.2:Data.Text.Lazy.toStrict"
-                , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf16LE"
-                , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
-                , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
-                ]
+      HSpec.describe ("Expected result contained in top query results") $ do
+        testCase 1
+          (strictByteString, string)
+            ["bytestring-0.11.4.0:Data.ByteString.Char8.unpack"]
+        testCase 1
+          (string, strictByteString)
+          ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
+        testCase 11
+          (lazyText, strictByteString)
+          [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
+          , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
+          , "text-2.0.2:Data.Text.Encoding.encodeUtf32LE . text-2.0.2:Data.Text.Lazy.toStrict"
+          , "text-2.0.2:Data.Text.Encoding.encodeUtf8 . text-2.0.2:Data.Text.Lazy.toStrict"
+          , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf16LE"
+          , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
+          , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
+          ]
+        testCase 37
+          (strictByteString, lazyText)
+          [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeLatin1"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeUtf16BE"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeUtf16LE"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeUtf32BE"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeUtf32LE"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeUtf8"
+          , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeUtf8Lenient"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf8 . bytestring-0.11.4.0:Data.ByteString.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf8 . bytestring-0.11.4.0:Data.ByteString.Char8.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf8 . bytestring-0.11.4.0:Data.ByteString.Lazy.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf8 . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeASCII . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeLatin1 . bytestring-0.11.4.0:Data.ByteString.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeLatin1 . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf16BE . bytestring-0.11.4.0:Data.ByteString.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf16LE . bytestring-0.11.4.0:Data.ByteString.Char8.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32BE . bytestring-0.11.4.0:Data.ByteString.Lazy.fromStrict"
+          , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32LE . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
+          ]
   where
-    maxCount = 11
-    maxCountSpTrees = maxCount
-
     fns lst = map (PPFunctions . NE.toList . fn) lst
 
     fn bs = fromMaybe
       (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
       (MyLib.parseComposedFunctions bs)
 
-    getResults graphData (src, dst) =
-      let res = MyLib.runQueryAll maxCountSpTrees (src, dst) graphData
+    getResults maxCount graphData (src, dst) =
+      let res = MyLib.runQueryAll maxCount (src, dst) graphData
           !first = take maxCount res
       in first
 

@@ -8,6 +8,6 @@ main :: IO ()
 main = do
   [fileName] <- Env.getArgs
   declarationMapJsonList <- either fail pure =<< MyLib.fileReadDeclarationMap fileName
-  MyLib.runPrintQueryAll maxCount declarationMapJsonList MyLib.Examples.strictBytestring2String
+  MyLib.runPrintQueryAll maxCount declarationMapJsonList (fst MyLib.Examples.strictByteString, fst MyLib.Examples.lazyText)
   where
     maxCount = 10
