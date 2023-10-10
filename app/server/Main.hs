@@ -7,9 +7,10 @@ import Text.Read (readMaybe)
 main :: IO ()
 main = do
   argList <- Env.getArgs
-  port <- case argList of
-        [] -> pure 8080
-        [portStr] -> maybe (fail $ "invalid port number: " <> portStr) pure (readMaybe portStr)
-        _ -> fail "Expected at most one argument: port number"
-  putStrLn $ "Running server on port " <> show port
-  Server.main port
+  (port, graphDataFileName) <- case argList of
+    [portStr, graphDataFileName] -> do
+      port <- maybe (fail $ "invalid port number: " <> portStr) pure (readMaybe portStr)
+      pure (port, graphDataFileName)
+    _ -> fail "Expected exactly two arguments: (1) port number; (2) graph JSON data filename"
+  putStrLn $ "Running server on " <> "http://localhost:" <> show port
+  Server.main port graphDataFileName

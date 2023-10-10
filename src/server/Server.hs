@@ -7,20 +7,20 @@ import qualified Server.Pages.Root
 import Servant
 import Network.Wai.Handler.Warp (run)
 import Server.Api
-import Lucid (Html)
+import qualified MyLib
 
-main :: Int -> IO ()
-main port = run port app
+main :: Int -> FilePath -> IO ()
+main port graphDataFilename =
+  MyLib.withGraphFromFile graphDataFilename $ \graph ->
+    run port (app graph)
 
-server :: Server Root
-server = helloHandler
+server :: MyLib.Graph -> Server Root
+server graph =
+  Server.Pages.Root.handler graph
 
-helloHandler :: Handler (Html ())
-helloHandler = return Server.Pages.Root.page
-
-app :: Application
-app =
-  serve myApi server
+app :: MyLib.Graph -> Application
+app graph =
+  serve myApi (server graph)
   where
     myApi :: Proxy Root
     myApi = Proxy

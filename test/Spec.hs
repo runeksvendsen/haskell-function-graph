@@ -13,15 +13,12 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-import qualified Control.Monad.ST as ST
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
 
 main :: IO ()
-main = do
-  graphData <- either fail pure =<< MyLib.fileReadDeclarationMap testDataFileName
-  let !graph = ST.runST $ MyLib.buildGraph graphData
+main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
   let getResults' maxCount = map (PPFunctions . map void) . getResults maxCount graph
       testCase maxCount (from, to) expectedList =
         HSpec.it (unwords [snd from, "to", snd to, "(max:", show maxCount <> ")"]) $ do
@@ -77,10 +74,8 @@ main = do
       (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
       (MyLib.parseComposedFunctions bs)
 
-    getResults maxCount graphData (src, dst) =
-      let res = MyLib.runQueryAll maxCount (src, dst) graphData
-          !first = take maxCount res
-      in first
+    getResults maxCount graph (src, dst) =
+      take maxCount $ MyLib.runQueryAll maxCount (src, dst) graph
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [MyLib.Function ()] }
   deriving (Eq, Ord)

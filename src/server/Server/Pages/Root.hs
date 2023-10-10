@@ -2,82 +2,52 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 
 module Server.Pages.Root
-( page
+( handler
 )
 where
 
 import Lucid
-import Control.Monad (when)
+import Lucid.Htmx
+import qualified Data.Text as T
+import Servant.Server (Handler)
+import qualified Server.Monad as MyLib
+import qualified Server.Pages.Search as Search
+import qualified MyLib.Examples as Examples
+import qualified MyLib
+import Control.Monad (forM_)
+
+handler :: MyLib.Graph -> Maybe T.Text -> Maybe T.Text -> Handler (Html ())
+handler graph (Just src) (Just dst) = do
+  searchPage <- Search.page graph src dst
+  pure $ page <> searchPage -- NOTE: The 'hxTarget_' trick doesn't seem to work so this is done for now instead
+handler _ _ _ = pure page
 
 page :: Html ()
 page = doctypehtml_ $ do
   head_ $ do
     title_ "Haskell Function Graph"
   body_ $ do
-    div_ [id_ "header"] "Syntax"
-    p_ "This is an example of Lucid syntax."
-    p_ "FROM type" <> input_ [id_ "from"]
-    p_ "TO type" <> input_ [id_ "to"]
-    button_ [id_ "search"] "Search"
+    div_ [id_ "header"] "Search for compositions of functions"
+    let targetId = "search_result"
+    form targetId
+    h3_ "Results"
+    div_ [id_ targetId] ""
 
-demo :: Html ()
-demo =
-  doctypehtml_ $ do
-        head_ (do meta_ [charset_ "utf-8"]
-                  meta_ [name_ "viewport"
-                        ,content_ "width=device-width, initial-scale=1"]
-                  link_ [href_ "//fonts.googleapis.com/css?family=Open+Sans"
-                        ,rel_ "stylesheet"
-                        ,type_ "text/css"]
-                  link_ [href_ "//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.1.0/css/bootstrap.min.css"
-                        ,rel_ "stylesheet"
-                        ,type_ "text/css"]
-                  title_ "YSU Closing Status")
-        body_ (div_ [class_ "container"]
-                    (do h1_ "YSU Closing Status"
-                        t_ [class_ "deal"] "So, here's the deal:"
-                        t_ (do "The weather is currently "
-                               strong_ "(unknown)"
-                               " and "
-                               strong_ "(unknown)"
-                               ".")
-                        t_ (do "There are currently "
-                               strong_ "Closings!"
-                               " delays/closings according to a local (Youngstown) news source.")
-                        t_ (do "Youngstown State University "
-                               strong_ (if False
-                                           then span_ [style_ "color: green;"] "WAS mentioned"
-                                           else span_ [style_ "color: red;"] "was NOT mentioned")
-                               " among them.")
-                        t_ (do "There are currently "
-                               strong_ (toHtml (maybe "unknown" show (Just 123 :: Maybe Int)))
-                               " weather alert(s) covering Youngstown as of "
-                               strong_ "2014-23-23"
-                               ".")
-                        when (0 /= 1)
-                             (ul_ (mapM_ (\w ->
-                                            li_ (do strong_ "Foo"
-                                                    " expiring "
-                                                    toHtml (show w)))
-                                         [1 .. 5]))
-                        hr_ []
-                        p_ [style_ "text-align: center;"]
-                           (small_ (do "This website is not affiliated Youngstown "
-                                       "State University in any way. It was "
-                                       (a_ [href_ "https://github.com/relrod/isysuclosed.com/"]
-                                           "written")
-                                       " to make a point."))
-                        p_ [style_ "text-align: center;"]
-                           (small_ (do "While hopefully accurate, this is NOT an official "
-                                       "resource. Always confirm "
-                                       a_ [href_ "https://swww.ysu.edu/downloads/closing_procedure.pdf"]
-                                          "official"
-                                       " resources."))
-                        p_ [style_ "text-align: center; color: #888888"]
-                           (small_ "Valid HTML5. Weather information via Weather Underground.")
-                        img_ [style_ "display: block; margin: 0 auto; width: 180px;"
-                             ,src_ "http://icons.wxug.com/logos/images/wundergroundLogo_4c_horz.jpg"
-                             ,alt_ "Weather Underground Logo"]))
-  where t_ :: Term a r
-           => a -> r
-        t_ = termWith "p" [class_ " t "]
+form :: T.Text -> Html ()
+form targetId = do
+  h3_ "Search"
+  p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
+  form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId)] $ do
+    label_ [for_ "src"] "FROM type: "
+    input_ [name_ "src", id_ "src", list_ "type_suggestions", placeholder_ "FROM type"]
+    suggestions "type_suggestions"
+    label_ [for_ "dst"] "TO type: "
+    input_ [name_ "dst", id_ "dst", list_ "type_suggestions", placeholder_ "TO type"]
+    suggestions "type_suggestions"
+    button_ [] "Search"
+
+suggestions :: T.Text -> Html ()
+suggestions id' = do
+  datalist_ [id_ id'] $ do
+    forM_ Examples.all $ \example ->
+       option_ [value_ $ MyLib.fullyQualifiedTypeToText (fst example)] ""

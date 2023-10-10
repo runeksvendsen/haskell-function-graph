@@ -4,6 +4,13 @@ module MyLib.Examples where
 
 import MyLib
 
+all :: [(FullyQualifiedType, String)]
+all =
+  [ string
+  , strictByteString
+  , lazyText
+  ]
+
 strictByteString :: (FullyQualifiedType, String)
 strictByteString =
   ("bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString", "strict ByteString")

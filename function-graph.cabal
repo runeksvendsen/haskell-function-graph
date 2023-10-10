@@ -21,6 +21,7 @@ library
                     , dump-decls
                     , aeson
                     , bytestring
+                    , text
                     , containers
                     , utf8-string
                     , pretty-show
@@ -32,14 +33,20 @@ library function-graph-server
     import:           warnings
     exposed-modules:  Server
                       Server.Api
+                      Server.Monad
                       Server.Pages.Root
+                      Server.Pages.Search
     build-depends:    base
+                    , function-graph
+                    , text
                     , lucid
+                    , lucid-htmx
                     , servant-lucid
                     , servant
                     , servant-server
                     , wai
                     , warp
+                    , mtl
     hs-source-dirs:   src/server
     default-language: Haskell2010
 

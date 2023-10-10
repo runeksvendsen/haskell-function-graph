@@ -9,6 +9,7 @@
 {-# LANGUAGE BangPatterns #-}
 module MyLib
   ( fileReadDeclarationMap
+  , withGraphFromFile
   , buildGraph
   , runQueryAll
   , runPrintQueryAll
@@ -16,9 +17,12 @@ module MyLib
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction
   , Function(..), TypedFunction, UntypedFunction
+  , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
+  , Graph
   -- * Re-exports
-  , FullyQualifiedType(..)
   , Json.FunctionType
+  , DG.IDigraph
+  , NE.NonEmpty
   ) where
 
 import qualified Json
@@ -45,11 +49,24 @@ import qualified Data.STRef as STM
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Maybe (listToMaybe)
+import qualified Data.Text.Encoding as TE
+import qualified Data.Text as T
+
+type Graph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 
 fileReadDeclarationMap
   :: FilePath
   -> IO (Either String [Json.DeclarationMapJson String])
 fileReadDeclarationMap fileName = A.eitherDecode <$> BSL.readFile fileName
+
+withGraphFromFile
+  :: FilePath
+  -> (Graph -> IO a)
+  -> IO a
+withGraphFromFile fileName f = do
+  graphData <- either fail pure =<< MyLib.fileReadDeclarationMap fileName
+  let !graph = ST.runST $ MyLib.buildGraph graphData
+  f graph
 
 runPrintQueryAll
   :: Int
@@ -272,6 +289,18 @@ newtype FullyQualifiedType = FullyQualifiedType { unFullyQualifiedType :: BS.Byt
 
 fqtPackage :: FullyQualifiedType -> BS.ByteString
 fqtPackage = BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
+
+textToFullyQualifiedType
+  :: T.Text
+  -> FullyQualifiedType
+textToFullyQualifiedType =
+  FullyQualifiedType . TE.encodeUtf8
+
+fullyQualifiedTypeToText
+  :: FullyQualifiedType
+  -> T.Text
+fullyQualifiedTypeToText =
+  TE.decodeUtf8 . unFullyQualifiedType
 
 instance Hashable FullyQualifiedType
 
