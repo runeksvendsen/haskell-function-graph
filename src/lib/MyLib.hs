@@ -15,7 +15,7 @@ module MyLib
   , runPrintQueryAll
   , spTreeToPaths
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
-  , renderFunction, parseFunction
+  , renderFunction, parseFunction, renderTypedFunction
   , Function(..), TypedFunction, UntypedFunction
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
   , Graph
@@ -250,6 +250,18 @@ parseComposedFunctions bs = do
 renderFunction :: Function typeSig -> BS.ByteString
 renderFunction fn =
   _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
+
+-- | Render a function's name (output of 'renderFunction') and its FROM and TO type.
+renderTypedFunction
+  :: TypedFunction
+  -> (BS.ByteString, (FullyQualifiedType, FullyQualifiedType))
+  -- ^ (output of 'renderFunction', (FROM type, TO type))
+renderTypedFunction fn =
+  ( renderFunction fn
+  , (Json.functionType_arg sig, Json.functionType_ret sig)
+  )
+  where
+    sig = _function_typeSig fn
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'
 parseFunction :: BS.ByteString -> Maybe UntypedFunction
