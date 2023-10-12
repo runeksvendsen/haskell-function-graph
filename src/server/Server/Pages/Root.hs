@@ -16,16 +16,21 @@ import qualified MyLib.Examples as Examples
 import qualified MyLib
 import Control.Monad (forM_)
 
-handler :: MyLib.Graph -> Maybe T.Text -> Maybe T.Text -> Handler (Html ())
-handler graph (Just src) (Just dst) = do
-  searchPage <- Search.page graph src dst
-  pure $ page <> searchPage -- NOTE: The 'hxTarget_' trick doesn't seem to work so this is done for now instead
-handler _ _ _ = pure page
+handler :: Html () -> MyLib.Graph -> Maybe T.Text -> Maybe T.Text -> Handler (Html ())
+handler appendToHead graph mSrc mDst =
+  case (mSrc, mDst) of
+    (Just src, Just dst) -> do
+      searchPage <- Search.page graph src dst
+      pure $ page' <> searchPage -- NOTE: The 'hxTarget_' trick doesn't seem to work so this is done for now instead
+    _ -> pure page'
+  where
+    page' = page appendToHead
 
-page :: Html ()
-page = doctypehtml_ $ do
+page :: Html () -> Html ()
+page appendToHead = doctypehtml_ $ do
   head_ $ do
     title_ "Haskell Function Graph"
+    appendToHead
   body_ $ do
     div_ [id_ "header"] "Search for compositions of functions"
     let targetId = "search_result"
