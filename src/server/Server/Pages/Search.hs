@@ -18,7 +18,10 @@ import Data.List (intersperse)
 page :: MyLib.Graph -> T.Text -> T.Text -> Handler (Html ())
 page graph src dst = pure $ do
   p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
-  forM_ results $ \result -> renderResult result >> br_ []
+  table_ $
+    tbody_ $
+      forM_ results $ \result ->
+        tr_ $ td_ $ renderResult result
   where
     maxCount = 20
 
