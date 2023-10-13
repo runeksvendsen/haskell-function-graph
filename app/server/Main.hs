@@ -1,8 +1,13 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main (main) where
 
 import qualified Server
 import qualified System.Environment as Env
+import qualified Data.FileEmbed
+import qualified Data.Text.Encoding as TE
 import Text.Read (readMaybe)
+import Lucid
 
 main :: IO ()
 main = do
@@ -13,4 +18,7 @@ main = do
       pure (port, graphDataFileName)
     _ -> fail "Expected exactly two arguments: (1) port number; (2) graph JSON data filename"
   putStrLn $ "Running server on " <> "http://localhost:" <> show port
-  Server.main port graphDataFileName
+  Server.main appendToHead port graphDataFileName
+  where
+    appendToHead = style_ $ TE.decodeUtf8 cssBS
+    cssBS = $(Data.FileEmbed.makeRelativeToProject "css/chota.css" >>= Data.FileEmbed.embedFile)
