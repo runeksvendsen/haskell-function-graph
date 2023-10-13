@@ -16,7 +16,7 @@ module MyLib
   , spTreeToPaths
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
-  , Function(..), TypedFunction, UntypedFunction
+  , Function(..), TypedFunction, UntypedFunction, functionPackageNoVersion
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
   , Graph
   -- * Re-exports
@@ -225,6 +225,17 @@ data Function typeSig = Function
 
 instance Functor Function where
   fmap f fn = fn { _function_typeSig = f $ _function_typeSig fn }
+
+functionPackageNoVersion
+  :: Show typeSig
+  => Function typeSig
+  -> BS.ByteString
+functionPackageNoVersion fn =
+  case Search.split "-" (_function_package fn) of
+    lst | length lst > 1 ->
+      BS.concat $ intersperse "-" (init lst)
+    _ ->
+      error $ "Invalid package name for Function: " <> show fn
 
 -- | Render composed functions.
 --

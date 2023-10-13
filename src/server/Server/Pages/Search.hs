@@ -14,14 +14,27 @@ import Servant.Server (Handler)
 import qualified Server.Monad as MyLib
 import qualified MyLib
 import Data.List (intersperse)
+import qualified Data.Text.Encoding as TE
+import Data.Containers.ListUtils (nubOrd)
 
 page :: MyLib.Graph -> T.Text -> T.Text -> Handler (Html ())
 page graph src dst = pure $ do
   p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
-  table_ $
+  table_ $ do
+    thead_ $
+      tr_ $ do
+        td_ "Function composition"
+        td_ "Dependencies"
     tbody_ $
       forM_ results $ \result ->
-        tr_ $ td_ $ renderResult result
+        tr_ $ do
+          td_ $ renderResult result
+          td_ $
+            mconcat $
+              intersperse ", " $
+                map (mono . toHtml . TE.decodeUtf8) $
+                  nubOrd $
+                    map MyLib.functionPackageNoVersion result
   where
     maxCount = 20
 
