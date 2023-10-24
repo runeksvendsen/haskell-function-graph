@@ -27,7 +27,7 @@ module MyLib
 
 import qualified Json
 import qualified Data.Graph.Digraph as DG
-import qualified Data.Graph.BellmanFord as BF
+import qualified Data.Graph.Dijkstra as Dijkstra
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as BSL
 import Control.Monad.ST (ST)
@@ -366,7 +366,7 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
   reverse . snd <$> STM.readSTRef resultRef
   where
     getResult :: DG.Digraph s v (NE.NonEmpty meta) -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
-    getResult g = BF.runBF g f w $ BF.bellmanFord src >> BF.pathTo dst
+    getResult g = Dijkstra.runDijkstra g f w $ Dijkstra.dijkstra src >> Dijkstra.pathTo dst
 
     go resultRef ig = do
       let ifMissingResults action = do
