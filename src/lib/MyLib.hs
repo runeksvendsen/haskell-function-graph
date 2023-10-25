@@ -412,7 +412,7 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
     getResult g = querySingleResult f w src dst g
 
     go resultRef ig = do
-      let ifMissingResults action = do
+      let whenMissingResults action = do
             (count', _) <- STM.readSTRef resultRef
             unless (count' >= maxCount) action
       res <- DG.thaw ig >>= getResult
@@ -424,7 +424,7 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
           let traceStr = disp (map DG.eMeta path)
           unless (null traceStr) $ traceM traceStr
           forM_ path $ \edge -> do
-            ifMissingResults $ do
+            whenMissingResults $ do
               g' <- DG.thaw ig
               DG.removeEdge g' edge
               ig' <- DG.freeze g'
