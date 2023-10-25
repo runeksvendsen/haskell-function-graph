@@ -4,12 +4,12 @@ packages:
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/dump-decls.git
-    tag: 18d2371027223612f092c17f2853657df5215677
+    tag: 37ca23588c26303a6dfa56be7cda32e61c76e142
 
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/bellman-ford.git
-    tag: 8671d2f5dce6c4201052ed2ffa98da9000b1fc4d
+    tag: 3b3c720e152a2e6248971d6dd183acd5d63dbe6a
 
 source-repository-package
     type: git

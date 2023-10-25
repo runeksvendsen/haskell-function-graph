@@ -34,7 +34,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
         testCase 1
           (string, strictByteString)
           ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
-        testCase 11
+        testCase 30
           (lazyText, strictByteString)
           [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
           , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -44,7 +44,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
           ]
-        testCase 37
+        testCase 45
           (strictByteString, lazyText)
           [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
           , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"

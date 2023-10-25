@@ -11,9 +11,11 @@ module MyLib
   ( fileReadDeclarationMap
   , withGraphFromFile
   , buildGraph
+  , buildGraphMut
   , runQueryAll
   , runPrintQueryAll
-  , spTreeToPaths
+  , runQuerySingleResult
+  , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
   , Function(..), TypedFunction, UntypedFunction, functionPackageNoVersion
@@ -23,6 +25,7 @@ module MyLib
   , Json.FunctionType
   , DG.IDigraph
   , NE.NonEmpty
+  , DG.freeze, DG.thaw
   ) where
 
 import qualified Json
@@ -51,6 +54,7 @@ import qualified Data.Set as Set
 import Data.Maybe (listToMaybe)
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
+import Control.DeepSeq (NFData)
 
 type Graph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 
@@ -100,6 +104,13 @@ spTreeToPaths lst = do
     folder [] ne = map (: []) $ NE.toList ne
     folder prefixes ne = concat $ map (\newEdge -> map (++ [newEdge]) prefixes) (NE.toList ne)
 
+-- | How many shortest paths does the input shortest path tree contain?
+--
+--   This is the length of the outer list returned by 'spTreeToPaths' for the given input.
+spTreePathsCount :: [NE.NonEmpty edge] -> Int
+spTreePathsCount = do
+  product . map NE.length
+
 functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> TypedFunction -> Double
 functionWeight (src, dst) function
   | srcPkg == fnPkg || dstPkg == fnPkg = 0
@@ -116,17 +127,25 @@ runQueryAll
 runQueryAll maxCount (src, dst) graph =
   ST.runST $ runQueryAllST maxCount (src, dst) graph
 
+-- | Build an immutable graph
 buildGraph
   :: [Json.DeclarationMapJson String]
   -> ST s (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
-buildGraph declarationMapJsonList = do
+buildGraph declarationMapJsonList =
+  buildGraphMut declarationMapJsonList >>= DG.freeze
+
+-- | Build a mutable graph
+buildGraphMut
+  :: [Json.DeclarationMapJson String]
+  -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
+buildGraphMut declarationMapJsonList = do
   let buildGraph'' = do
         graph <- buildGraph' declarationMapJsonList
         vertexCount <- DG.vertexCount graph
         edgeCount <- DG.edgeCount graph
         traceM $ unwords ["Built graph with", show vertexCount, "vertices and", show edgeCount, "edges"]
         pure graph
-  buildGraph'' >>= DG.freeze
+  buildGraph''
   where
     excludeTypes = map FullyQualifiedType
       [
@@ -179,7 +198,7 @@ runQueryAllST
   -> (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> ST s [[TypedFunction]]
 runQueryAllST maxCount (src, dst) graph = do
-  res <- queryAll weightCombine initialWeight src dst dispFun maxCount graph
+  res <- queryAll weightCombine' initialWeight src dst dispFun maxCount graph
   let res' = map (map DG.eMeta) res
   pure
     $ sortOn (\path -> (sum $ map (functionWeight (src, dst)) path, length path)) -- (sum weights, length path)
@@ -188,24 +207,47 @@ runQueryAllST maxCount (src, dst) graph = do
   where
     debug = False
 
+    weightCombine' = weightCombine (src, dst)
+
     dispFun fns =
       if debug
         then show (length fns) <> ": " <> disp' fns
         else ""
 
-    edgeWeightNE :: NE.NonEmpty TypedFunction -> Double
-    edgeWeightNE functions =
-      minimum $ map (functionWeight (src, dst)) (NE.toList functions)
-
-    weightCombine :: Double -> NE.NonEmpty TypedFunction -> Double
-    weightCombine w functions = w + edgeWeightNE functions
-
-    initialWeight = 1
-
     disp' :: [NE.NonEmpty (Function typeSig)] -> String
     disp' =
       let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
       in unlines . map renderComposedFunctionsStr . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
+
+runQuerySingleResult
+  :: (FullyQualifiedType, FullyQualifiedType)
+  -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> Maybe [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)]
+runQuerySingleResult (src, dst) g = ST.runST $ do
+  g' <- DG.thaw g
+  runQuerySingleResultST (src, dst) g'
+
+runQuerySingleResultST
+  :: (FullyQualifiedType, FullyQualifiedType)
+  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> ST s (Maybe [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)])
+runQuerySingleResultST (src, dst) =
+  querySingleResult (weightCombine (src, dst)) initialWeight src dst
+
+-- TODO: why not 0?
+initialWeight :: Double
+initialWeight = 1
+
+weightCombine
+  :: (FullyQualifiedType, FullyQualifiedType)
+  -> Double
+  -> NE.NonEmpty TypedFunction
+  -> Double
+weightCombine (src, dst) w functions =
+  w + edgeWeightNE
+  where
+    edgeWeightNE =
+      minimum $ map (functionWeight (src, dst)) (NE.toList functions)
 
 instance DG.HasWeight (Function typeSig) Double where
   weight = const 1
@@ -221,7 +263,9 @@ data Function typeSig = Function
   , _function_module :: BS.ByteString -- ^ e.g. "Data.Text"
   , _function_package :: BS.ByteString -- ^ e.g. "text-1.2.4.1"
   , _function_typeSig :: typeSig
-  } deriving (Eq, Show, Ord)
+  } deriving (Eq, Show, Ord, Generic)
+
+instance NFData a => NFData (Function a)
 
 instance Functor Function where
   fmap f fn = fn { _function_typeSig = f $ _function_typeSig fn }
@@ -308,7 +352,7 @@ type UntypedFunction = Function ()
 -- | E.g. "base-4.18.0.0:GHC.Ptr.Ptr zstd-0.1.3.0:Codec.Compression.Zstd.FFI.Types.DDict".
 --   Guaranteed to not be a function type (ie. will not contain any function arrows).
 newtype FullyQualifiedType = FullyQualifiedType { unFullyQualifiedType :: BS.ByteString }
-  deriving (Eq, Ord, Show, Generic, IsString)
+  deriving (Eq, Ord, Show, Generic, IsString, NFData)
 
 fqtPackage :: FullyQualifiedType -> BS.ByteString
 fqtPackage = BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
@@ -365,8 +409,7 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
   go resultRef graph
   reverse . snd <$> STM.readSTRef resultRef
   where
-    getResult :: DG.Digraph s v (NE.NonEmpty meta) -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
-    getResult g = Dijkstra.runDijkstra g f w $ Dijkstra.dijkstra src >> Dijkstra.pathTo dst
+    getResult g = querySingleResult f w src dst g
 
     go resultRef ig = do
       let ifMissingResults action = do
@@ -386,3 +429,46 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
               DG.removeEdge g' edge
               ig' <- DG.freeze g'
               go resultRef ig'
+
+querySingleResult
+  :: ( Ord v
+     , Hashable v
+     , Show v
+     , Show meta
+     , Eq meta
+     , DG.HasWeight (NE.NonEmpty meta) Double
+     )
+  => (Double -> NE.NonEmpty meta -> Double)
+  -> Double
+  -> v
+  -> v
+  -> DG.Digraph s v (NE.NonEmpty meta)
+  -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
+querySingleResult f w src dst g =
+  Dijkstra.runDijkstra g f w $
+    Dijkstra.dijkstraSourceSink (src, dst) >> Dijkstra.pathTo dst
+
+-- ### Specialization
+
+type Vertex = FullyQualifiedType
+type Meta = TypedFunction
+
+{-# SPECIALISE
+  queryAll
+    :: (Double -> NE.NonEmpty Meta -> Double)
+    -> Double
+    -> Vertex
+    -> Vertex
+    -> ([NE.NonEmpty Meta] -> String)
+    -> Int
+    -> DG.IDigraph Vertex (NE.NonEmpty Meta)
+    -> ST.ST s [[DG.IdxEdge Vertex (NE.NonEmpty Meta)]] #-}
+
+{-# SPECIALISE
+  querySingleResult
+    :: (Double -> NE.NonEmpty Meta -> Double)
+    -> Double
+    -> Vertex
+    -> Vertex
+    -> DG.Digraph s Vertex (NE.NonEmpty Meta)
+    -> ST s (Maybe [DG.IdxEdge Vertex (NE.NonEmpty Meta)]) #-}
