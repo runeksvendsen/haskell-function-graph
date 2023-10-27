@@ -44,9 +44,9 @@ import Data.Functor ((<&>))
 import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
-import Control.Monad (forM_, unless, guard)
-import Debug.Trace (traceM)
-import Data.List (intersperse, foldl', sortOn)
+import Control.Monad (forM_, unless, guard, forM)
+import Debug.Trace (traceM, trace)
+import Data.List (intersperse, foldl', sortOn, subsequences)
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.STRef as STM
 import qualified Data.List.NonEmpty as NE
@@ -113,7 +113,7 @@ spTreePathsCount = do
 
 functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> TypedFunction -> Double
 functionWeight (src, dst) function
-  | srcPkg == fnPkg || dstPkg == fnPkg = 0
+  | srcPkg == fnPkg || dstPkg == fnPkg = 0.5
   | otherwise = 1
   where
     fnPkg = _function_package function
@@ -125,7 +125,7 @@ runQueryAll
   -> (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> [[TypedFunction]]
 runQueryAll maxCount (src, dst) graph =
-  ST.runST $ runQueryAllST maxCount (src, dst) graph
+  ST.runST $ DG.thaw graph >>= runQueryAllST maxCount (src, dst)
 
 -- | Build an immutable graph
 buildGraph
@@ -195,7 +195,7 @@ buildGraphMut declarationMapJsonList = do
 runQueryAllST
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
-  -> (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
+  -> (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> ST s [[TypedFunction]]
 runQueryAllST maxCount (src, dst) graph = do
   res <- queryAll weightCombine' initialWeight src dst dispFun maxCount graph
@@ -211,7 +211,7 @@ runQueryAllST maxCount (src, dst) graph = do
 
     dispFun fns =
       if debug
-        then show (length fns) <> ": " <> disp' fns
+        then show (length fns) <> ":\n" <> disp' fns
         else ""
 
     disp' :: [NE.NonEmpty (Function typeSig)] -> String
@@ -236,7 +236,7 @@ runQuerySingleResultST (src, dst) =
 
 -- TODO: why not 0?
 initialWeight :: Double
-initialWeight = 1
+initialWeight = 0
 
 weightCombine
   :: (FullyQualifiedType, FullyQualifiedType)
@@ -248,12 +248,6 @@ weightCombine (src, dst) w functions =
   where
     edgeWeightNE =
       minimum $ map (functionWeight (src, dst)) (NE.toList functions)
-
-instance DG.HasWeight (Function typeSig) Double where
-  weight = const 1
-
-instance DG.HasWeight (NE.NonEmpty (Function typeSig)) Double where
-  weight = const 1
 
 -- | A function that takes a single non-function argument and returns a non-function value.
 --
@@ -395,40 +389,56 @@ queryAll
      , Show v
      , Show meta
      , Eq meta
-     , DG.HasWeight meta Double, DG.HasWeight (NE.NonEmpty meta) Double)
+     )
   => (Double -> NE.NonEmpty meta -> Double)
   -> Double
   -> v -- ^ src
   -> v -- ^ dst
   -> ([NE.NonEmpty meta] -> String)
   -> Int -- ^ max number of results
-  -> DG.IDigraph v (NE.NonEmpty meta)
+  -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
 queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
   resultRef <- STM.newSTRef (0, [])
-  go resultRef graph
+  go resultRef
   reverse . snd <$> STM.readSTRef resultRef
   where
-    getResult g = querySingleResult f w src dst g
+    f' a b =
+      let newWeight = f a b
+      in -- trace (unwords ["Old weight:", show a, "New weight:", show newWeight, "Edges:", disp [b]] )
+         newWeight
 
-    go resultRef ig = do
+    getResult = querySingleResult f' w src dst graph
+
+    go resultRef = do
       let whenMissingResults action = do
             (count', _) <- STM.readSTRef resultRef
             unless (count' >= maxCount) action
-      res <- DG.thaw ig >>= getResult
-      case res of
+          accumulateResult res = do
+            STM.modifySTRef' resultRef $ \(!count', !res') ->
+              (count' + 1, res : res')
+            let traceStr = disp (map DG.eMeta res)
+            unless (null traceStr) $ traceM traceStr
+
+      mPath <- getResult
+      case mPath of
         Nothing -> pure () -- no path
         Just [] -> pure () -- src == dst
         Just path -> do
-          STM.modifySTRef' resultRef $ \(!count', !res') -> (count' + 1, path : res')
-          let traceStr = disp (map DG.eMeta path)
-          unless (null traceStr) $ traceM traceStr
-          forM_ path $ \edge -> do
+          accumulateResult path
+
+          forM_ (nonEmptySubsequences path) $ \edges -> do
             whenMissingResults $ do
-              g' <- DG.thaw ig
-              DG.removeEdge g' edge
-              ig' <- DG.freeze g'
-              go resultRef ig'
+              forM_ edges (DG.removeEdge graph)
+              mRes <- getResult
+              forM_ mRes accumulateResult
+              forM_ edges (DG.insertEdge graph)
+
+          whenMissingResults $ do
+            forM_ path (DG.removeEdge graph)
+            go resultRef
+
+    nonEmptySubsequences = tail . subsequences
 
 querySingleResult
   :: ( Ord v
@@ -436,7 +446,6 @@ querySingleResult
      , Show v
      , Show meta
      , Eq meta
-     , DG.HasWeight (NE.NonEmpty meta) Double
      )
   => (Double -> NE.NonEmpty meta -> Double)
   -> Double
@@ -461,7 +470,7 @@ type Meta = TypedFunction
     -> Vertex
     -> ([NE.NonEmpty Meta] -> String)
     -> Int
-    -> DG.IDigraph Vertex (NE.NonEmpty Meta)
+    -> DG.Digraph s Vertex (NE.NonEmpty Meta)
     -> ST.ST s [[DG.IdxEdge Vertex (NE.NonEmpty Meta)]] #-}
 
 {-# SPECIALISE

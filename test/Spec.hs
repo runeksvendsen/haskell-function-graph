@@ -13,6 +13,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
+import qualified Debug.Trace
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -21,7 +22,7 @@ main :: IO ()
 main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
   let getResults' maxCount = map (PPFunctions . map void) . getResults maxCount graph
       testCase maxCount (from, to) expectedList =
-        HSpec.it (unwords [snd from, "to", snd to, "(max:", show maxCount <> ")"]) $ do
+        HSpec.it (unwords [snd from, "to", snd to]) $ do
           getResults' maxCount (fst from, fst to)
             `isSupersetOf`
               fns expectedList
@@ -34,7 +35,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
         testCase 1
           (string, strictByteString)
           ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
-        testCase 30
+        testCase 15
           (lazyText, strictByteString)
           [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
           , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -44,7 +45,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
           ]
-        testCase 45
+        testCase 50
           (strictByteString, lazyText)
           [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
           , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
@@ -87,4 +88,5 @@ isSupersetOf :: (Show a, Ord a) => [a] -> [a] -> IO ()
 isSupersetOf superSetLst subSetLst =
   let superSet = Set.fromList superSetLst
       subSet = Set.fromList subSetLst
-  in Set.intersection superSet subSet `shouldBe` subSet
+  in -- Debug.Trace.trace (unlines $ map show superSetLst)
+  (Set.intersection superSet subSet `shouldBe` subSet)
