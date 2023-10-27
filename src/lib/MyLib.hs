@@ -14,7 +14,7 @@ module MyLib
   , buildGraphMut
   , runQueryAll
   , runPrintQueryAll
-  , runQuerySingleResult
+  , runQuerySingleResult, runQuerySingleResultST
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction

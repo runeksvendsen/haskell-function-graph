@@ -6,7 +6,6 @@ import MyLib.Examples
 import qualified Control.Monad.ST as ST
 import Data.Functor (void)
 import Control.Monad ((<=<))
-import Debug.Trace
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -14,6 +13,7 @@ testDataFileName = "data/all3.json"
 main :: IO ()
 main = do
   graphData <- readGraphData testDataFileName
+  mutGraph <- ST.stToIO $ MyLib.buildGraphMut graphData
   frozenGraph <- buildGraphFreezeIO graphData
   defaultMain
     [ bgroup "Graph"
@@ -30,7 +30,7 @@ main = do
         , runQueryAll 37 (strictByteString, lazyText) frozenGraph
         ]
       , bgroup "runQuerySingleResult"
-        [ bench "TODO" $ nf (trace "HEY" . MyLib.runQuerySingleResult (fst strictByteString, fst string)) frozenGraph
+        [ bench "TODO" $ nfAppIO (ST.stToIO . MyLib.runQuerySingleResultST (fst strictByteString, fst string)) mutGraph
         ]
       ]
     ]
