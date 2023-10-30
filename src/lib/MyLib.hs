@@ -45,7 +45,7 @@ import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
 import Control.Monad (forM_, unless, guard, forM)
-import Debug.Trace (traceM, trace)
+import Debug.Trace (traceM)
 import Data.List (intersperse, foldl', sortOn, subsequences)
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.STRef as STM
@@ -138,14 +138,8 @@ buildGraph declarationMapJsonList =
 buildGraphMut
   :: [Json.DeclarationMapJson String]
   -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
-buildGraphMut declarationMapJsonList = do
-  let buildGraph'' = do
-        graph <- buildGraph' declarationMapJsonList
-        vertexCount <- DG.vertexCount graph
-        edgeCount <- DG.edgeCount graph
-        traceM $ unwords ["Built graph with", show vertexCount, "vertices and", show edgeCount, "edges"]
-        pure graph
-  buildGraph''
+buildGraphMut =
+  buildGraph'
   where
     excludeTypes = map FullyQualifiedType
       [
