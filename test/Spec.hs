@@ -13,7 +13,6 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-import qualified Debug.Trace
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -35,7 +34,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
         testCase 1
           (string, strictByteString)
           ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
-        testCase 15
+        testCase 30
           (lazyText, strictByteString)
           [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
           , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -88,5 +87,4 @@ isSupersetOf :: (Show a, Ord a) => [a] -> [a] -> IO ()
 isSupersetOf superSetLst subSetLst =
   let superSet = Set.fromList superSetLst
       subSet = Set.fromList subSetLst
-  in -- Debug.Trace.trace (unlines $ map show superSetLst)
-  (Set.intersection superSet subSet `shouldBe` subSet)
+  in Set.intersection superSet subSet `shouldBe` subSet
