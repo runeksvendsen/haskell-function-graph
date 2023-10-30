@@ -14,11 +14,11 @@ main :: IO ()
 main = do
   graphData <- readGraphData testDataFileName
   mutGraph <- ST.stToIO $ MyLib.buildGraphMut graphData
-  frozenGraph <- buildGraphFreezeIO graphData
+  frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
   defaultMain
     [ bgroup "Graph"
       [ bench "Create" $ nfAppIO (ST.stToIO . void . MyLib.buildGraphMut) graphData
-      , bench "Create+freeze" $ nfAppIO buildGraphFreezeIO graphData
+      , bench "Freeze" $ nfAppIO (ST.stToIO . MyLib.freeze) mutGraph
       , bench "Thaw" $ nfAppIO (void . ST.stToIO . MyLib.thaw) frozenGraph
       , bench "Thaw+freeze" $ nfAppIO (void . ST.stToIO . (MyLib.freeze <=< MyLib.thaw)) frozenGraph
       ]
@@ -44,8 +44,6 @@ main = do
 
     buildGraphFreeze graphData =
       MyLib.buildGraphMut graphData >>= MyLib.freeze
-
-    buildGraphFreezeIO = ST.stToIO . buildGraphFreeze
 
 yourFunction1 :: Int -> Int
 yourFunction1 x = x * 2
