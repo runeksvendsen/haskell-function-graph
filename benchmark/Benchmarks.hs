@@ -30,7 +30,10 @@ main = do
         , runQueryAll 61 (strictByteString, lazyText) frozenGraph
         ]
       , bgroup "runQuerySingleResult"
-        [ bench "TODO" $ nfAppIO (ST.stToIO . MyLib.runQuerySingleResultST (fst strictByteString, fst string)) mutGraph
+        [ runQuerySingleResult (strictByteString, string) mutGraph
+        , runQuerySingleResult (string, strictByteString) mutGraph
+        , runQuerySingleResult (lazyText, strictByteString) mutGraph
+        , runQuerySingleResult (strictByteString, lazyText) mutGraph
         ]
       ]
     ]
@@ -38,6 +41,10 @@ main = do
     runQueryAll maxCount (src, dst) frozenGraph =
       bench (snd src <> " -> " <> snd dst) $
           nf (MyLib.runQueryAll maxCount (fst src, fst dst)) frozenGraph
+
+    runQuerySingleResult (src, dst) mutGraph =
+      bench (snd src <> " -> " <> snd dst) $
+        nfAppIO (ST.stToIO . MyLib.runQuerySingleResultST (fst src, fst dst)) mutGraph
 
     readGraphData fileName =
       either fail pure =<< MyLib.fileReadDeclarationMap fileName
