@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 module MyLib
   ( fileReadDeclarationMap
   , withGraphFromFile
@@ -393,9 +394,9 @@ queryAll
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
 queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
-  resultRef <- STM.newSTRef (0, [])
+  resultRef <- STM.newSTRef ((0, []), mempty)
   go resultRef
-  reverse . snd <$> STM.readSTRef resultRef
+  reverse . snd . fst <$> STM.readSTRef resultRef
   where
     f' a b =
       let newWeight = f a b
@@ -406,11 +407,16 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
 
     go resultRef = do
       let whenMissingResults action = do
-            (count', _) <- STM.readSTRef resultRef
+            ((count', _), _) <- STM.readSTRef resultRef
             unless (count' >= maxCount) action
+
           accumulateResult res = do
-            STM.modifySTRef' resultRef $ \(!count', !res') ->
-              (count' + 1, res : res')
+            STM.modifySTRef' resultRef $ \a@((!count', !res'), resultIds) ->
+              let pathId' = pathId res
+              in if not $ Set.member pathId' resultIds
+                then ((count' + 1, res : res'), Set.insert pathId' resultIds)
+                else a
+
             let traceStr = disp (map DG.eMeta res)
             unless (null traceStr) $ traceM traceStr
 
@@ -433,6 +439,10 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
             go resultRef
 
     nonEmptySubsequences = tail . subsequences
+
+    pathId = \case
+      [] -> []
+      path -> DG.eFromIdx (head path) : map DG.eToIdx path
 
 querySingleResult
   :: ( Ord v
