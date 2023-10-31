@@ -154,6 +154,7 @@ buildGraphMut =
       , "rebase-1.20"
       , "rerebase-1.20"
       , "rio-0.1.22.0"
+      , "pa-prelude-0.1.0.0"
       , "shakers-0.0.50" -- NOTE: re-exports all of basic-prelude:BasicPrelude
       ]
 
