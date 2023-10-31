@@ -398,12 +398,7 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
   go resultRef
   reverse . snd . fst <$> STM.readSTRef resultRef
   where
-    f' a b =
-      let newWeight = f a b
-      in -- trace (unwords ["Old weight:", show a, "New weight:", show newWeight, "Edges:", disp [b]] )
-         newWeight
-
-    getResult = querySingleResult f' w src dst graph
+    getResult = querySingleResult f w src dst graph
 
     go resultRef = do
       let whenMissingResults action = do
