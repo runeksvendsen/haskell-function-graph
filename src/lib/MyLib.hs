@@ -196,13 +196,27 @@ runQueryAllST maxCount (src, dst) graph = do
   res <- queryAll weightCombine' initialWeight src dst dispFun maxCount graph
   let res' = map (map DG.eMeta) res
   pure
-    $ sortOn (\path -> (sum $ map (functionWeight (src, dst)) path, length path)) -- (sum weights, length path)
+    $ sortOn sortOnFun
     $ concat
     $ map spTreeToPaths res'
   where
     debug = False
 
     weightCombine' = weightCombine (src, dst)
+
+    sortOnFun path =
+      -- (sum weights, length path, allFunctionsFromSamePackage)
+      ( sum $ map (functionWeight (src, dst)) path
+      , length path
+      , if allFromSamePackage path then 0 else 1 :: Int
+      )
+
+    allFromSamePackage :: [TypedFunction] -> Bool
+    allFromSamePackage = allEq . map _function_package
+
+    allEq :: Eq a => [a] -> Bool
+    allEq [] = True
+    allEq (x:xs) = all (x ==) xs
 
     dispFun fns =
       if debug
