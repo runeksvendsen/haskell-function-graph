@@ -12,4 +12,5 @@ type Root
   =  "root"
   :> QueryParam "src" T.Text
   :> QueryParam "dst" T.Text
+  :> QueryParam "limit" Word
   :> Get '[HTML] (Html ())

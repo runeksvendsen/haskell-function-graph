@@ -17,8 +17,8 @@ import Data.List (intersperse)
 import qualified Data.Text.Encoding as TE
 import Data.Containers.ListUtils (nubOrd)
 
-page :: MyLib.Graph -> T.Text -> T.Text -> Handler (Html ())
-page graph src dst = pure $ do
+page :: MyLib.Graph -> T.Text -> T.Text -> Word -> Handler (Html ())
+page graph src dst maxCount = pure $ do
   p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
   table_ $ do
     thead_ $
@@ -36,11 +36,9 @@ page graph src dst = pure $ do
                   nubOrd $
                     map MyLib.functionPackageNoVersion result
   where
-    maxCount = 20
-
     results =
-      take maxCount $ MyLib.runQueryAll
-        maxCount
+      take (fromIntegral maxCount) $ MyLib.runQueryAll
+        (fromIntegral maxCount)
         (MyLib.textToFullyQualifiedType src, MyLib.textToFullyQualifiedType dst)
         graph
 
