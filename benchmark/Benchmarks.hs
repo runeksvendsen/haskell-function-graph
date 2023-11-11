@@ -26,8 +26,8 @@ main = do
       [ bgroup "runQueryAll"
         [ runQueryAll 1 (strictByteString, string) frozenGraph
         , runQueryAll 1 (string, strictByteString) frozenGraph
-        , runQueryAll 30 (lazyText, strictByteString) frozenGraph
-        , runQueryAll 61 (strictByteString, lazyText) frozenGraph
+        , runQueryAll 26 (lazyText, strictByteString) frozenGraph
+        , runQueryAll 37 (strictByteString, lazyText) frozenGraph
         ]
       , bgroup "runQuerySingleResult"
         [ runQuerySingleResult (strictByteString, string) mutGraph
