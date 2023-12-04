@@ -6,4 +6,8 @@ pkgs.mkShell {
     pkgs.zlib
     pkgs.git
   ];
+
+  shellHook = ''
+    export PATH=./hls:$PATH
+  '';
 }
