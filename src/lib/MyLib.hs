@@ -46,7 +46,7 @@ import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
 import Control.Monad (forM_, unless, guard)
-import Debug.Trace (traceM)
+import Debug.Trace (traceM, trace)
 import Data.List (intersperse, foldl', sortOn, subsequences)
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.STRef as STM
@@ -183,6 +183,7 @@ buildGraphMut =
     buildGraph' =
       DG.fromEdgesMulti
         . Set.fromList
+        . (\edges -> trace ("buildGraph edge count: " <> show (length edges)) edges )
         . nubOrdOn functionIdentity
         . filter (not . isExcluded)
         . concat
@@ -195,7 +196,7 @@ runQueryAllST
   -> (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> ST s [[TypedFunction]]
 runQueryAllST maxCount (src, dst) graph = do
-  res <- queryAllFast weightCombine' initialWeight src dst dispFun maxCount graph
+  res <- fakeQueryTraceGraph weightCombine' initialWeight src dst dispFun maxCount graph
   let res' = map (map DG.eMeta) res
   pure
     $ sortOn sortOnFun
@@ -393,6 +394,23 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
 
+fakeQueryTraceGraph
+  :: (Double -> NE.NonEmpty TypedFunction -> Double)
+  -> Double
+  -> FullyQualifiedType
+  -> FullyQualifiedType
+  -> p1
+  -> p2
+  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
+fakeQueryTraceGraph f w src dst disp maxCount fullGraph = do
+  subGraph <- preprocess fTerminate f w src dst fullGraph
+  traceM "### GOT SUBGRAPH"
+  _ <- traceGraph f w dst src subGraph
+  pure undefined
+  where
+    fTerminate _ prio dstPrio = pure $ prio > dstPrio * 3
+
 -- | An optimization of 'queryAll'.
 --
 --   1. Pre-processing:
@@ -420,20 +438,39 @@ queryAllFast
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
 queryAllFast f w src dst disp maxCount fullGraph = do
-  subGraph <- preprocess fullGraph
+  subGraph <- preprocess fTerminate f w src dst fullGraph
   res <- queryAll f w dst src disp maxCount subGraph -- dst/src swapped
   pure $ map (reverse . map DG.flipEdge) res
   where
-    preprocess g = do
-      ref <- STM.newSTRef []
-      let accumEdge = \case
-            Dijkstra.TraceEvent_Relax edge _ ->
-              STM.modifySTRef' ref (edge :)
-            _ -> pure ()
-      _ <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
-        Dijkstra.dijkstraSourceSinkSamePrio (src, dst) >> Dijkstra.pathTo dst
-      edges <- STM.readSTRef ref
-      DG.fromEdges (map DG.flipEdge edges)
+    fTerminate _ prio dstPrio = pure $ prio > dstPrio * 3
+
+-- | Graph pre-processing
+preprocess
+  :: forall s v meta.
+     ( Ord v
+     , Hashable v
+     , Show v
+     , Show meta
+     , Eq meta
+     )
+  => (DG.VertexId -> Double -> Double -> Dijkstra.Dijkstra s v meta Bool)
+  -> (Double -> meta -> Double)
+  -> Double
+  -> v -- ^ src
+  -> v -- ^ dst
+  -> DG.Digraph s v meta
+  -> ST.ST s (DG.Digraph s v meta)
+preprocess fTerminate f w src dst g = do
+  ref <- STM.newSTRef []
+  let accumEdge = \case
+        Dijkstra.TraceEvent_Relax edge _ ->
+          STM.modifySTRef' ref (edge :)
+        _ -> pure ()
+  _ <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
+    Dijkstra.dijkstraTerminateDstPrio fTerminate (src, dst) >> Dijkstra.pathTo dst
+  edges <- STM.readSTRef ref
+  traceM $ "### preprocess edge count: " <> show (length edges)
+  DG.fromEdges (map DG.flipEdge edges)
 
 queryAll
   :: forall s v meta.
@@ -498,15 +535,15 @@ queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
       path -> DG.eFromIdx (head path) : map DG.eToIdx path
 
 -- | Print a Graphviz dot graph of all the visited edges/nodes
-querySingleResultTrace
+traceGraph
   :: (Double -> NE.NonEmpty TypedFunction -> Double)
   -> Double
   -> FullyQualifiedType
   -> FullyQualifiedType
   -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
   -> ST s (Maybe [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)])
-querySingleResultTrace =
-  querySingleResultTraceGeneric
+traceGraph =
+  traceGraphGeneric
     (bsToLT . unFullyQualifiedType)
     (bsToLT . _function_name . DG.eMeta)
   where
@@ -526,10 +563,17 @@ querySingleResult
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
 querySingleResult f w src dst g =
-  Dijkstra.runDijkstra g f w $
-    Dijkstra.dijkstraSourceSinkSamePrio (src, dst) >> Dijkstra.pathTo dst
+  Dijkstra.runDijkstra g f w $ querySingleResultDijkstra src dst
 
-querySingleResultTraceGeneric
+querySingleResultDijkstra
+  :: (Ord v, Hashable v, Show v, Show meta, Eq meta)
+  => v
+  -> v
+  -> Dijkstra.Dijkstra s v meta (Maybe [DG.IdxEdge v meta])
+querySingleResultDijkstra src dst =
+  Dijkstra.dijkstraSourceSink (src, dst) >> Dijkstra.pathTo dst
+
+traceGraphGeneric
   :: ( Ord v
      , Hashable v
      , Show v
@@ -544,16 +588,16 @@ querySingleResultTraceGeneric
   -> v
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
-querySingleResultTraceGeneric vertexLabel edgeLabel f w src dst g = do
+traceGraphGeneric vertexLabel edgeLabel f w src dst g = do
   ref <- STM.newSTRef []
   let accumEdge = \case
         Dijkstra.TraceEvent_Relax edge _ ->
           STM.modifySTRef' ref (edge :)
         _ -> pure ()
   res <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
-    Dijkstra.dijkstraSourceSinkSamePrio (src, dst) >> Dijkstra.pathTo dst
+    Dijkstra.dijkstra src >> Dijkstra.pathTo dst
   edges <- STM.readSTRef ref
-  traceM $ "query Single Result: DONE! Edge count: " <> show (length edges)
+  traceM $ "traceGraphGeneric: DONE! Edge count: " <> show (length edges)
   subgraph <- DG.fromEdges edges
   dotGraph <- DG.graphToDotMulti vertexLabel edgeLabel "sp_graph" subgraph
   traceM $ LT.unpack dotGraph

@@ -13,13 +13,14 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
+import Debug.Trace (trace)
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
 
 main :: IO ()
 main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
-  let getResults' maxCount = map (PPFunctions . map void) . getResults maxCount graph
+  let getResults' maxCount = traceResults . map (PPFunctions . map void) . getResults maxCount graph
       testCase maxCount (from, to) expectedList =
         HSpec.it (unwords [snd from, "to", snd to]) $ do
           getResults' maxCount (fst from, fst to)
@@ -34,7 +35,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
         testCase 1
           (string, strictByteString)
           ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
-        testCase 26
+        testCase 200
           (lazyText, strictByteString)
           [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
           , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -44,7 +45,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
           ]
-        testCase 37
+        testCase 200
           (strictByteString, lazyText)
           [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
           , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
@@ -76,6 +77,10 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
 
     getResults maxCount graph (src, dst) =
       take maxCount $ MyLib.runQueryAll maxCount (src, dst) graph
+
+    traceResults :: [PPFunctions] -> [PPFunctions]
+    traceResults results =
+      trace (unlines $ "" : map show results) results
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [MyLib.Function ()] }
   deriving (Eq, Ord)

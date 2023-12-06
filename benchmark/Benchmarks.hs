@@ -35,6 +35,13 @@ main = do
         , runQuerySingleResult (lazyText, strictByteString) mutGraph
         , runQuerySingleResult (strictByteString, lazyText) mutGraph
         ]
+      , bgroup "preprocess"
+        [
+          -- preprocess fullGraph
+      -- bench "* 3" $ -- TODO: hardcoded
+      --   nfAppIO (ST.stToIO . MyLib.runQuerySingleResultST (fst src, fst dst)) mutGraph
+
+        ]
       ]
     ]
   where
