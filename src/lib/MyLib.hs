@@ -46,7 +46,7 @@ import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
 import Control.Monad (forM_, unless, guard)
-import Debug.Trace (traceM, trace)
+import Debug.Trace (traceM)
 import Data.List (intersperse, foldl', sortOn, subsequences)
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.STRef as STM
@@ -195,7 +195,7 @@ runQueryAllST
   -> (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> ST s [[TypedFunction]]
 runQueryAllST maxCount (src, dst) graph = do
-  res <- fakeQueryTraceGraph weightCombine' initialWeight src dst dispFun maxCount graph
+  res <- queryAllFast weightCombine' initialWeight src dst dispFun maxCount graph
   let res' = map (map DG.eMeta) res
   pure
     $ sortOn sortOnFun
@@ -392,22 +392,6 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   fromNode = Json.functionType_arg . _function_typeSig
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
-
-fakeQueryTraceGraph
-  :: (Double -> NE.NonEmpty TypedFunction -> Double)
-  -> Double
-  -> FullyQualifiedType
-  -> FullyQualifiedType
-  -> p1
-  -> p2
-  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
-fakeQueryTraceGraph f w src dst disp maxCount fullGraph = do
-  subGraph <- preprocess fTerminate f w src dst fullGraph
-  _ <- traceGraph f w dst src subGraph
-  pure undefined
-  where
-    fTerminate _ prio dstPrio = pure $ prio > dstPrio * 3
 
 -- | An optimization of 'queryAll'.
 --
