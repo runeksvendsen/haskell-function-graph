@@ -183,7 +183,6 @@ buildGraphMut =
     buildGraph' =
       DG.fromEdgesMulti
         . Set.fromList
-        . (\edges -> trace ("buildGraph edge count: " <> show (length edges)) edges )
         . nubOrdOn functionIdentity
         . filter (not . isExcluded)
         . concat
@@ -405,16 +404,10 @@ fakeQueryTraceGraph
   -> ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
 fakeQueryTraceGraph f w src dst disp maxCount fullGraph = do
   subGraph <- preprocess fTerminate f w src dst fullGraph
-  traceM "### GOT SUBGRAPH"
-  Just dstId <- DG.lookupVertex subGraph dst
-  dstOut <- DG.outgoingEdges subGraph dstId
-  traceM $ "### Outgoing vertices from " <> bsToStr (unFullyQualifiedType dst) <> " : " <> show (map (NE.map (bsToStr . _function_name) . DG.eMeta) dstOut)
   _ <- traceGraph f w dst src subGraph
   pure undefined
   where
     fTerminate _ prio dstPrio = pure $ prio > dstPrio * 3
-
-    bsToStr = T.unpack . TE.decodeUtf8
 
 -- | An optimization of 'queryAll'.
 --
@@ -474,7 +467,6 @@ preprocess fTerminate f w src dst g = do
   _ <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
     Dijkstra.dijkstraTerminateDstPrio fTerminate (src, dst) >> Dijkstra.pathTo dst
   edges <- STM.readSTRef ref
-  traceM $ "### preprocess edge count: " <> show (length edges)
   DG.fromIdxEdges (map DG.flipEdge edges)
 
 queryAll
