@@ -20,7 +20,7 @@ testDataFileName = "data/all3.json"
 
 main :: IO ()
 main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
-  let getResults' maxCount = traceResults . map (PPFunctions . map void) . getResults maxCount graph
+  let getResults' maxCount = traceFunction . map (PPFunctions . map void) . getResults maxCount graph
       testCase maxCount (from, to) expectedList =
         HSpec.it (unwords [snd from, "to", snd to]) $ do
           getResults' maxCount (fst from, fst to)
@@ -77,6 +77,9 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
 
     getResults maxCount graph (src, dst) =
       take maxCount $ MyLib.runQueryAll maxCount (src, dst) graph
+
+    traceFunction = if shouldTrace then traceResults else id
+    shouldTrace = False
 
     traceResults :: [PPFunctions] -> [PPFunctions]
     traceResults results =
