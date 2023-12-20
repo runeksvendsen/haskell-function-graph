@@ -1,6 +1,5 @@
 packages:
     *.cabal
-    /home/parallels/code/bellman-ford
 
 optimization: 2
 
@@ -9,10 +8,10 @@ source-repository-package
     location: https://github.com/runeksvendsen/dump-decls.git
     tag: 37ca23588c26303a6dfa56be7cda32e61c76e142
 
--- source-repository-package
---     type: git
---     location: https://github.com/runeksvendsen/bellman-ford.git
---     tag: d337d2ac611acb5c32a94987ebad6a7c40fcd1fd
+source-repository-package
+    type: git
+    location: https://github.com/runeksvendsen/bellman-ford.git
+    tag: e02c9c7ddbffc5c48e1736c0fcce3ac37a3967e4
 
 source-repository-package
     type: git
