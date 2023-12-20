@@ -52,7 +52,7 @@ import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.STRef as STM
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-import Data.Maybe (listToMaybe)
+import Data.Maybe (listToMaybe, fromMaybe)
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
@@ -195,7 +195,7 @@ runQueryAllST
   -> (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
   -> ST s [[TypedFunction]]
 runQueryAllST maxCount (src, dst) graph = do
-  res <- queryAllFast weightCombine' initialWeight src dst dispFun maxCount graph
+  res <- queryAllEvenFaster weightCombine' initialWeight src dst dispFun maxCount graph
   let res' = map (map DG.eMeta) res
   pure
     $ sortOn sortOnFun
@@ -393,6 +393,27 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
 
+-- | Use 'Dijkstra.dijkstraKShortestPaths'
+queryAllEvenFaster
+  :: forall s v meta.
+     ( Ord v
+     , Hashable v
+     , Show v
+     , Show meta
+     , Eq meta
+     )
+  => (Double -> NE.NonEmpty meta -> Double)
+  -> Double
+  -> v -- ^ src
+  -> v -- ^ dst
+  -> ([NE.NonEmpty meta] -> String)
+  -> Int -- ^ max number of results
+  -> DG.Digraph s v (NE.NonEmpty meta)
+  -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
+queryAllEvenFaster f w src dst disp maxCount g = do
+  Dijkstra.runDijkstra g f w $
+    fromMaybe [] <$> Dijkstra.dijkstraKShortestPaths maxCount (src, dst)
+
 -- | An optimization of 'queryAll'.
 --
 --   1. Pre-processing:
@@ -449,7 +470,7 @@ preprocess fTerminate f w src dst g = do
           STM.modifySTRef' ref (edge :)
         _ -> pure ()
   _ <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
-    Dijkstra.dijkstraTerminateDstPrio fTerminate (src, dst) >> Dijkstra.pathTo dst
+    Dijkstra.dijkstraTerminateDstPrio (error "TODO") (src, dst) >> Dijkstra.pathTo dst
   edges <- STM.readSTRef ref
   DG.fromIdxEdges (map DG.flipEdge edges)
 
@@ -590,7 +611,7 @@ type Vertex = FullyQualifiedType
 type Meta = TypedFunction
 
 {-# SPECIALISE
-  queryAllFast
+  queryAllEvenFaster
     :: (Double -> NE.NonEmpty Meta -> Double)
     -> Double
     -> Vertex

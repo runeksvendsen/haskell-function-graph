@@ -20,22 +20,22 @@ testDataFileName = "data/all3.json"
 
 main :: IO ()
 main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
-  let getResults' maxCount = traceFunction . map (PPFunctions . map void) . getResults maxCount graph
-      testCase maxCount (from, to) expectedList =
+  let getResults' k maxCount = traceFunction . map (PPFunctions . map void) . getResults k maxCount graph
+      testCase k maxCount (from, to) expectedList =
         HSpec.it (unwords [snd from, "to", snd to]) $ do
-          getResults' maxCount (fst from, fst to)
+          getResults' k maxCount (fst from, fst to)
             `isSupersetOf`
               fns expectedList
   HSpec.hspec $
     HSpec.describe "Unit tests" $ do
       HSpec.describe ("Expected result contained in top query results") $ do
-        testCase 1
+        testCase 1 1
           (strictByteString, string)
             ["bytestring-0.11.4.0:Data.ByteString.Char8.unpack"]
-        testCase 1
+        testCase 1 1
           (string, strictByteString)
           ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
-        testCase 26
+        testCase 4 26
           (lazyText, strictByteString)
           [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
           , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -45,7 +45,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf32BE"
           , "bytestring-0.11.4.0:Data.ByteString.toStrict . text-2.0.2:Data.Text.Lazy.Encoding.encodeUtf8"
           ]
-        testCase 37
+        testCase 3 37
           (strictByteString, lazyText)
           [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
           , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
@@ -75,8 +75,8 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
       (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
       (MyLib.parseComposedFunctions bs)
 
-    getResults maxCount graph (src, dst) =
-      take maxCount $ MyLib.runQueryAll maxCount (src, dst) graph
+    getResults k maxResultCount graph (src, dst) =
+      take maxResultCount $ MyLib.runQueryAll k (src, dst) graph
 
     traceFunction = if shouldTrace then traceResults else id
     shouldTrace = False
