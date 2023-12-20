@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 module MyLib.Test
 ( allTestCases
 , case1
@@ -18,6 +19,8 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
+import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 
 data QueryTest = QueryTest
     { queryTest_name :: String
@@ -111,7 +114,9 @@ case4 =
     ]
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [MyLib.Function ()] }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance NFData PPFunctions
 
 instance Show PPFunctions where
   show = MyLib.renderComposedFunctionsStr . unPPFunctions

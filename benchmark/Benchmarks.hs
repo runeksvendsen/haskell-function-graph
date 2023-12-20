@@ -2,6 +2,7 @@ module Main where
 
 import Criterion.Main
 import qualified MyLib
+import qualified MyLib.Test
 import MyLib.Examples
 import qualified Control.Monad.ST as ST
 import Data.Functor (void)
@@ -23,31 +24,20 @@ main = do
       , bench "Thaw+freeze" $ nfAppIO (void . ST.stToIO . (MyLib.freeze <=< MyLib.thaw)) frozenGraph
       ]
     , bgroup "Query"
-      [ bgroup "runQueryAll"
-        [ runQueryAll 1 (strictByteString, string) frozenGraph
-        , runQueryAll 1 (string, strictByteString) frozenGraph
-        , runQueryAll 26 (lazyText, strictByteString) frozenGraph
-        , runQueryAll 37 (strictByteString, lazyText) frozenGraph
-        ]
+      [ bgroup "runQueryAll" $
+          map (runQueryAll frozenGraph) MyLib.Test.allTestCases
       , bgroup "runQuerySingleResult"
         [ runQuerySingleResult (strictByteString, string) mutGraph
         , runQuerySingleResult (string, strictByteString) mutGraph
         , runQuerySingleResult (lazyText, strictByteString) mutGraph
         , runQuerySingleResult (strictByteString, lazyText) mutGraph
         ]
-      , bgroup "preprocess"
-        [
-          -- preprocess fullGraph
-      -- bench "* 3" $ -- TODO: hardcoded
-      --   nfAppIO (ST.stToIO . MyLib.runQuerySingleResultST (fst src, fst dst)) mutGraph
-
-        ]
       ]
     ]
   where
-    runQueryAll maxCount (src, dst) frozenGraph =
-      bench (snd src <> " -> " <> snd dst) $
-          nf (MyLib.runQueryAll maxCount (fst src, fst dst)) frozenGraph
+    runQueryAll frozenGraph test =
+      bench (MyLib.Test.queryTest_name test) $
+        nf (MyLib.Test.queryTest_runQuery test) frozenGraph
 
     runQuerySingleResult (src, dst) mutGraph =
       bench (snd src <> " -> " <> snd dst) $
