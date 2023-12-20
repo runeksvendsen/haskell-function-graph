@@ -16,6 +16,7 @@ library
     import:           warnings
     exposed-modules:  MyLib
                       MyLib.Examples
+                      MyLib.Test
     build-depends:    base
                     , hashable
                     , bellman-ford
