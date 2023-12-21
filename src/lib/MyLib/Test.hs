@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE RankNTypes #-}
 module MyLib.Test
 ( allTestCases
 , case1
@@ -21,12 +22,14 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
+import qualified Control.Monad.ST as ST
 
 data QueryTest = QueryTest
     { queryTest_name :: String
     , queryTest_runQuery
-        :: MyLib.IDigraph MyLib.FullyQualifiedType (NE.NonEmpty MyLib.TypedFunction)
-        -> [PPFunctions]
+        :: forall s.
+           MyLib.Digraph s MyLib.FullyQualifiedType (NE.NonEmpty MyLib.TypedFunction)
+        -> ST.ST s [PPFunctions]
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
 
@@ -39,12 +42,12 @@ mkTestCase
 mkTestCase k maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQuery = map (PPFunctions . map void) . getResults
+        , queryTest_runQuery = fmap (map (PPFunctions . map void)) . getResults
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
     getResults graph =
-      take maxCount $ MyLib.runQueryAll k (fst from, fst to) graph
+      take maxCount <$> MyLib.runQueryAllST k (fst from, fst to) graph
 
     fns :: [BSC8.ByteString] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)

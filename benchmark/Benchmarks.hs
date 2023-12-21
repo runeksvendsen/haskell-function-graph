@@ -25,7 +25,7 @@ main = do
       ]
     , bgroup "Query"
       [ bgroup "runQueryAll" $
-          map (runQueryAll frozenGraph) MyLib.Test.allTestCases
+          map (runQueryAll mutGraph) MyLib.Test.allTestCases
       , bgroup "runQuerySingleResult"
         [ runQuerySingleResult (strictByteString, string) mutGraph
         , runQuerySingleResult (string, strictByteString) mutGraph
@@ -35,9 +35,9 @@ main = do
       ]
     ]
   where
-    runQueryAll frozenGraph test =
+    runQueryAll mutGraph test =
       bench (MyLib.Test.queryTest_name test) $
-        nf (MyLib.Test.queryTest_runQuery test) frozenGraph
+        nfAppIO (ST.stToIO . MyLib.Test.queryTest_runQuery test) mutGraph
 
     runQuerySingleResult (src, dst) mutGraph =
       bench (snd src <> " -> " <> snd dst) $

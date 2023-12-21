@@ -9,6 +9,7 @@ import qualified Test.Hspec as HSpec
 import qualified Data.Set as Set
 import Debug.Trace (trace)
 import Control.Monad (forM_)
+import qualified Control.Monad.ST as ST
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -17,7 +18,8 @@ main :: IO ()
 main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
   let testCase test =
         HSpec.it (MyLib.Test.queryTest_name test) $ do
-          Set.fromList (traceFunction $ MyLib.Test.queryTest_runQuery test graph)
+          result <- ST.stToIO $ MyLib.Test.queryTest_runQuery test graph
+          Set.fromList (traceFunction result)
             `isSupersetOf`
               MyLib.Test.queryTest_expectedResult test
   HSpec.hspec $

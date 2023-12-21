@@ -13,7 +13,7 @@ module MyLib
   , withGraphFromFile
   , buildGraph
   , buildGraphMut
-  , runQueryAll
+  , runQueryAll, runQueryAllST
   , runPrintQueryAll
   , runQuerySingleResult, runQuerySingleResultST -- for benchmarking
   , spTreeToPaths, spTreePathsCount
@@ -24,7 +24,7 @@ module MyLib
   , Graph
   -- * Re-exports
   , Json.FunctionType
-  , DG.IDigraph
+  , DG.IDigraph, DG.Digraph
   , NE.NonEmpty
   , DG.freeze, DG.thaw
   ) where
@@ -58,7 +58,7 @@ import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import qualified Data.Text.Lazy as LT
 
-type Graph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
+type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
 
 fileReadDeclarationMap
   :: FilePath
@@ -67,11 +67,11 @@ fileReadDeclarationMap fileName = A.eitherDecode <$> BSL.readFile fileName
 
 withGraphFromFile
   :: FilePath
-  -> (Graph -> IO a)
+  -> (Graph ST.RealWorld -> IO a)
   -> IO a
 withGraphFromFile fileName f = do
   graphData <- either fail pure =<< MyLib.fileReadDeclarationMap fileName
-  let !graph = ST.runST $ MyLib.buildGraph graphData
+  graph <- ST.stToIO $ MyLib.buildGraphMut graphData
   f graph
 
 runPrintQueryAll
