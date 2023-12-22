@@ -8,9 +8,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 module MyLib
   ( fileReadDeclarationMap
-  , withGraphFromFile
+  , withGraphFromFile, withFrozenGraphFromFile
   , buildGraph
   , buildGraphMut
   , runQueryAll, runQueryAllST
@@ -21,7 +22,7 @@ module MyLib
   , renderFunction, parseFunction, renderTypedFunction
   , Function(..), TypedFunction, UntypedFunction, functionPackageNoVersion
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
-  , Graph
+  , Graph, FrozenGraph
   -- * Re-exports
   , Json.FunctionType
   , DG.IDigraph, DG.Digraph
@@ -58,6 +59,7 @@ import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import qualified Data.Text.Lazy as LT
 
+type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
 
 fileReadDeclarationMap
@@ -73,6 +75,14 @@ withGraphFromFile fileName f = do
   graphData <- either fail pure =<< MyLib.fileReadDeclarationMap fileName
   graph <- ST.stToIO $ MyLib.buildGraphMut graphData
   f graph
+
+withFrozenGraphFromFile
+  :: FilePath
+  -> (FrozenGraph -> IO a)
+  -> IO a
+withFrozenGraphFromFile fileName f =
+  withGraphFromFile fileName $ \mutGraph ->
+    ST.stToIO (DG.freeze mutGraph) >>= f
 
 runPrintQueryAll
   :: Int

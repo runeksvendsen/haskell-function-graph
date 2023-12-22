@@ -12,11 +12,11 @@ import Lucid
 
 main :: Html () -> Int -> FilePath -> IO ()
 main appendToHead port graphDataFilename =
-  MyLib.withGraphFromFile graphDataFilename $ \graph ->
+  MyLib.withFrozenGraphFromFile graphDataFilename $ \graph ->
     run port $
       app appendToHead graph
 
-app :: Html () -> MyLib.Graph -> Application
+app :: Html () -> MyLib.FrozenGraph -> Application
 app appendToHead graph =
   serve myApi server
   where

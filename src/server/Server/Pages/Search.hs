@@ -11,13 +11,12 @@ import Lucid
 import Control.Monad (forM_)
 import qualified Data.Text as T
 import Servant.Server (Handler)
-import qualified Server.Monad as MyLib
 import qualified MyLib
 import Data.List (intersperse)
 import qualified Data.Text.Encoding as TE
 import Data.Containers.ListUtils (nubOrd)
 
-page :: MyLib.Graph -> T.Text -> T.Text -> Word -> Handler (Html ())
+page :: MyLib.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
 page graph src dst maxCount = pure $ do
   p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
   table_ $ do

@@ -10,14 +10,13 @@ import Lucid
 import Lucid.Htmx
 import qualified Data.Text as T
 import Servant.Server (Handler)
-import qualified Server.Monad as MyLib
 import qualified Server.Pages.Search as Search
 import qualified MyLib.Examples as Examples
 import qualified MyLib
 import Control.Monad (forM_)
 import Data.Maybe (fromMaybe)
 
-handler :: Html () -> MyLib.Graph -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
+handler :: Html () -> MyLib.FrozenGraph -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
 handler appendToHead graph mSrc mDst mLimit =
   case (mSrc, mDst) of
     (Just src, Just dst) -> do
