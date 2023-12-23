@@ -3,7 +3,6 @@ module Main where
 import Criterion.Main
 import qualified MyLib
 import qualified MyLib.Test
-import MyLib.Examples
 import qualified Control.Monad.ST as ST
 import Data.Functor (void)
 import Control.Monad ((<=<))
@@ -26,22 +25,12 @@ main = do
     , bgroup "Query"
       [ bgroup "runQueryAll" $
           map (runQueryAll mutGraph) MyLib.Test.allTestCases
-      , bgroup "runQuerySingleResult"
-        [ runQuerySingleResult (strictByteString, string) mutGraph
-        , runQuerySingleResult (string, strictByteString) mutGraph
-        , runQuerySingleResult (lazyText, strictByteString) mutGraph
-        , runQuerySingleResult (strictByteString, lazyText) mutGraph
-        ]
       ]
     ]
   where
     runQueryAll mutGraph test =
       bench (MyLib.Test.queryTest_name test) $
         nfAppIO (ST.stToIO . MyLib.Test.queryTest_runQuery test) mutGraph
-
-    runQuerySingleResult (src, dst) mutGraph =
-      bench (snd src <> " -> " <> snd dst) $
-        nfAppIO (ST.stToIO . MyLib.runQuerySingleResultST (fst src, fst dst)) mutGraph
 
     readGraphData fileName =
       either fail pure =<< MyLib.fileReadDeclarationMap fileName

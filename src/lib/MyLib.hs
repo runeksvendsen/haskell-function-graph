@@ -1,13 +1,11 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 module MyLib
   ( fileReadDeclarationMap
@@ -16,7 +14,6 @@ module MyLib
   , buildGraphMut
   , runQueryAll, runQueryAllST
   , runPrintQueryAll
-  , runQuerySingleResult, runQuerySingleResultST -- for benchmarking
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
@@ -46,18 +43,15 @@ import Data.Functor ((<&>))
 import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
-import Control.Monad (forM_, unless, guard)
-import Debug.Trace (traceM)
-import Data.List (intersperse, foldl', sortOn, subsequences)
+import Control.Monad (guard)
+import Data.List (intersperse, foldl', sortOn)
 import Data.Containers.ListUtils (nubOrdOn)
-import qualified Data.STRef as STM
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Maybe (listToMaybe, fromMaybe)
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
-import qualified Data.Text.Lazy as LT
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -240,21 +234,6 @@ runQueryAllST maxCount (src, dst) graph = do
       let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
       in unlines . map renderComposedFunctionsStr . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
 
-runQuerySingleResult
-  :: (FullyQualifiedType, FullyQualifiedType)
-  -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> Maybe [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)]
-runQuerySingleResult (src, dst) g = ST.runST $ do
-  g' <- DG.thaw g
-  runQuerySingleResultST (src, dst) g'
-
-runQuerySingleResultST
-  :: (FullyQualifiedType, FullyQualifiedType)
-  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> ST s (Maybe [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)])
-runQuerySingleResultST (src, dst) =
-  querySingleResult (weightCombine (src, dst)) initialWeight src dst
-
 -- TODO: why not 0?
 initialWeight :: Double
 initialWeight = 0
@@ -424,197 +403,6 @@ queryAllEvenFaster f w src dst disp maxCount g = do
   Dijkstra.runDijkstra g f w $
     fromMaybe [] <$> Dijkstra.dijkstraKShortestPaths maxCount (src, dst)
 
--- | An optimization of 'queryAll'.
---
---   1. Pre-processing:
---     1. Run `dijkstraSourceSinkSamePrio` to obtain a subgraph of all visited nodes/edges
---     2. Apply `flipGraphEdges` to this subgraph, and use in step 2
---   2. Proceed as usual, but:
---     1. Operate on the subgraph produced above
---     2. Swap `src` and `dst` vertices
---   3. Post-processing:
---     1. For the results returned in step 2: apply `reverse . map flipEdge` (so the result paths aren't reversed)
-queryAllFast
-  :: forall s v meta.
-     ( Ord v
-     , Hashable v
-     , Show v
-     , Show meta
-     , Eq meta
-     )
-  => (Double -> NE.NonEmpty meta -> Double)
-  -> Double
-  -> v -- ^ src
-  -> v -- ^ dst
-  -> ([NE.NonEmpty meta] -> String)
-  -> Int -- ^ max number of results
-  -> DG.Digraph s v (NE.NonEmpty meta)
-  -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
-queryAllFast f w src dst disp maxCount fullGraph = do
-  subGraph <- preprocess fTerminate f w src dst fullGraph
-  res <- queryAll f w dst src disp maxCount subGraph -- dst/src swapped
-  pure $ map (reverse . map DG.flipEdge) res
-  where
-    fTerminate _ prio dstPrio = pure $ prio > dstPrio * 3
-
--- | Graph pre-processing
-preprocess
-  :: forall s v meta.
-     ( Ord v
-     , Hashable v
-     , Show v
-     , Show meta
-     , Eq meta
-     )
-  => (DG.VertexId -> Double -> Double -> Dijkstra.Dijkstra s v meta Bool)
-  -> (Double -> meta -> Double)
-  -> Double
-  -> v -- ^ src
-  -> v -- ^ dst
-  -> DG.Digraph s v meta
-  -> ST.ST s (DG.Digraph s v meta)
-preprocess fTerminate f w src dst g = do
-  ref <- STM.newSTRef []
-  let accumEdge = \case
-        Dijkstra.TraceEvent_Relax edge _ ->
-          STM.modifySTRef' ref (edge :)
-        _ -> pure ()
-  _ <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
-    Dijkstra.dijkstraTerminateDstPrio (error "TODO") (src, dst) >> Dijkstra.pathTo dst
-  edges <- STM.readSTRef ref
-  DG.fromIdxEdges (map DG.flipEdge edges)
-
-queryAll
-  :: forall s v meta.
-     ( Ord v
-     , Hashable v
-     , Show v
-     , Show meta
-     , Eq meta
-     )
-  => (Double -> NE.NonEmpty meta -> Double)
-  -> Double
-  -> v -- ^ src
-  -> v -- ^ dst
-  -> ([NE.NonEmpty meta] -> String)
-  -> Int -- ^ max number of results
-  -> DG.Digraph s v (NE.NonEmpty meta)
-  -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
-queryAll f w src dst disp maxCount graph = fmap (filter $ not . null) $ do
-  resultRef <- STM.newSTRef ((0, []), mempty)
-  go resultRef
-  reverse . snd . fst <$> STM.readSTRef resultRef
-  where
-    getResult = querySingleResult f w src dst graph
-
-    go resultRef = do
-      let whenMissingResults action = do
-            ((count', _), _) <- STM.readSTRef resultRef
-            unless (count' >= maxCount) action
-
-          accumulateResult res = do
-            STM.modifySTRef' resultRef $ \a@((!count', !res'), resultIds) ->
-              let pathId' = pathId res
-              in if not $ Set.member pathId' resultIds
-                then ((count' + 1, res : res'), Set.insert pathId' resultIds)
-                else a
-
-            let traceStr = disp (map DG.eMeta res)
-            unless (null traceStr) $ traceM traceStr
-
-      mPath <- getResult
-      case mPath of
-        Nothing -> pure () -- no path
-        Just [] -> pure () -- src == dst
-        Just path -> do
-          accumulateResult path
-
-          forM_ (nonEmptySubsequences path) $ \edges -> do
-            whenMissingResults $ do
-              forM_ edges (DG.removeEdge graph)
-              mRes <- getResult
-              forM_ mRes accumulateResult
-              forM_ edges (DG.insertEdge graph)
-
-          whenMissingResults $ do
-            forM_ path (DG.removeEdge graph)
-            go resultRef
-
-    nonEmptySubsequences = tail . subsequences
-
-    pathId = \case
-      [] -> []
-      path -> DG.eFromIdx (head path) : map DG.eToIdx path
-
--- | Print a Graphviz dot graph of all the visited edges/nodes
-traceGraph
-  :: (Double -> NE.NonEmpty TypedFunction -> Double)
-  -> Double
-  -> FullyQualifiedType
-  -> FullyQualifiedType
-  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> ST s (Maybe [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)])
-traceGraph =
-  traceGraphGeneric
-    (bsToLT . unFullyQualifiedType)
-    (bsToLT . _function_name . DG.eMeta)
-  where
-    bsToLT = LT.fromStrict . TE.decodeUtf8
-
-querySingleResult
-  :: ( Ord v
-     , Hashable v
-     , Show v
-     , Show meta
-     , Eq meta
-     )
-  => (Double -> NE.NonEmpty meta -> Double)
-  -> Double
-  -> v
-  -> v
-  -> DG.Digraph s v (NE.NonEmpty meta)
-  -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
-querySingleResult f w src dst g =
-  Dijkstra.runDijkstra g f w $ querySingleResultDijkstra src dst
-
-querySingleResultDijkstra
-  :: (Ord v, Hashable v, Show v, Show meta, Eq meta)
-  => v
-  -> v
-  -> Dijkstra.Dijkstra s v meta (Maybe [DG.IdxEdge v meta])
-querySingleResultDijkstra src dst =
-  Dijkstra.dijkstraSourceSink (src, dst) >> Dijkstra.pathTo dst
-
-traceGraphGeneric
-  :: ( Ord v
-     , Hashable v
-     , Show v
-     , Show meta
-     , Eq meta
-     )
-  => (v -> LT.Text)
-  -> (DG.IdxEdge v meta -> LT.Text)
-  -> (Double -> NE.NonEmpty meta -> Double)
-  -> Double
-  -> v
-  -> v
-  -> DG.Digraph s v (NE.NonEmpty meta)
-  -> ST s (Maybe [DG.IdxEdge v (NE.NonEmpty meta)])
-traceGraphGeneric vertexLabel edgeLabel f w src dst g = do
-  ref <- STM.newSTRef []
-  let accumEdge = \case
-        Dijkstra.TraceEvent_Relax edge _ ->
-          STM.modifySTRef' ref (edge :)
-        _ -> pure ()
-  res <- Dijkstra.runDijkstraTraceGeneric accumEdge g f w $
-    Dijkstra.dijkstra src >> Dijkstra.pathTo dst
-  edges <- STM.readSTRef ref
-  traceM $ "traceGraphGeneric: DONE! Edge count: " <> show (length edges)
-  subgraph <- DG.fromEdges edges
-  dotGraph <- DG.graphToDotMulti vertexLabel edgeLabel "sp_graph" subgraph
-  traceM $ LT.unpack dotGraph
-  pure res
-
 -- ### Specialization
 
 type Vertex = FullyQualifiedType
@@ -630,12 +418,3 @@ type Meta = TypedFunction
     -> Int
     -> DG.Digraph s Vertex (NE.NonEmpty Meta)
     -> ST.ST s [[DG.IdxEdge Vertex (NE.NonEmpty Meta)]] #-}
-
-{-# SPECIALISE
-  querySingleResult
-    :: (Double -> NE.NonEmpty Meta -> Double)
-    -> Double
-    -> Vertex
-    -> Vertex
-    -> DG.Digraph s Vertex (NE.NonEmpty Meta)
-    -> ST s (Maybe [DG.IdxEdge Vertex (NE.NonEmpty Meta)]) #-}
