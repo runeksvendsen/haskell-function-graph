@@ -400,7 +400,8 @@ queryAllEvenFaster
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
 queryAllEvenFaster f w src dst disp maxCount g = do
-  Dijkstra.runDijkstra g f w $
+  g' <- DG.freeze g >>= DG.thaw -- TODO: why is this necessary?
+  Dijkstra.runDijkstra g' f w $
     fromMaybe [] <$> Dijkstra.dijkstraKShortestPaths maxCount (src, dst)
 
 -- ### Specialization
