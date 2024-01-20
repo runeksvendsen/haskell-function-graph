@@ -94,6 +94,7 @@ test-suite function-graph-test
   build-depends:
       base
     , function-graph
+    , bellman-ford
     , bytestring
     , containers
     , hspec

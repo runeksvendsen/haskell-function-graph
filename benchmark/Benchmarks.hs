@@ -37,13 +37,3 @@ main = do
 
     buildGraphFreeze graphData =
       MyLib.buildGraphMut graphData >>= MyLib.freeze
-
-yourFunction1 :: Int -> Int
-yourFunction1 x = x * 2
-
-yourFunction2 :: Int -> Int
-yourFunction2 x = x * 3
-
-input1, input2 :: Int
-input1 = 10
-input2 = 20

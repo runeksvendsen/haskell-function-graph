@@ -23,13 +23,14 @@ import qualified Data.Set as Set
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
 import qualified Control.Monad.ST as ST
+import Data.Bifunctor (first)
 
 data QueryTest = QueryTest
     { queryTest_name :: String
     , queryTest_runQuery
         :: forall s.
            MyLib.Digraph s MyLib.FullyQualifiedType (NE.NonEmpty MyLib.TypedFunction)
-        -> ST.ST s [PPFunctions]
+        -> ST.ST s [(PPFunctions, Double)]
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
 
@@ -42,7 +43,7 @@ mkTestCase
 mkTestCase k maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQuery = fmap (map (PPFunctions . map void)) . getResults
+        , queryTest_runQuery = fmap (map (first $ PPFunctions . map void)) . getResults
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where

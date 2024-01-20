@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TupleSections #-}
 module MyLib
   ( fileReadDeclarationMap
   , withGraphFromFile, withFrozenGraphFromFile
@@ -52,6 +53,7 @@ import Data.Maybe (listToMaybe, fromMaybe)
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
+import Data.Bifunctor (first)
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -95,9 +97,10 @@ runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
   let !res = runQueryAll maxCount (src, dst) (ST.runST $ buildGraph declarationMapJsonList)
   putStrLn ""
   putStrLn $ disp' res
-  putStrLn $ "Got " <> show (length $ concat res) <> " results"
+  putStrLn $ "Got " <> show (length res) <> " results"
   where
-    disp' = unlines . map renderComposedFunctionsStr
+    disp' :: [([TypedFunction], Double)] -> String
+    disp' = unlines . map (\(path, weight) -> show weight <> ": " <> renderComposedFunctionsStr path)
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -128,8 +131,8 @@ functionWeight (src, dst) function
 runQueryAll
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
-  -> (DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction))
-  -> [[TypedFunction]]
+  -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> [([TypedFunction], Double)]
 runQueryAll maxCount (src, dst) graph =
   ST.runST $ DG.thaw graph >>= runQueryAllST maxCount (src, dst)
 
@@ -196,23 +199,25 @@ buildGraphMut =
 runQueryAllST
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
-  -> (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
-  -> ST s [[TypedFunction]]
+  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> ST s [([TypedFunction], Double)]
 runQueryAllST maxCount (src, dst) graph = do
   res <- queryAllEvenFaster weightCombine' initialWeight src dst dispFun maxCount graph
-  let res' = map (map DG.eMeta) res
+  let res' :: [([NE.NonEmpty TypedFunction], Double)]
+      res' = map (first $ map DG.eMeta) res
   pure
     $ sortOn sortOnFun
     $ concat
-    $ map spTreeToPaths res'
+    $ map (\(doubleList, weight) -> map (,weight) doubleList)
+    $ map (first spTreeToPaths) res'
   where
     debug = False
 
     weightCombine' = weightCombine (src, dst)
 
-    sortOnFun path =
+    sortOnFun (path, weight) =
       -- (sum weights, length path, allFunctionsFromSamePackage)
-      ( sum $ map (functionWeight (src, dst)) path
+      ( weight
       , length path
       , if allFromSamePackage path then 0 else 1 :: Int
       )
@@ -382,7 +387,7 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
 
--- | Use 'Dijkstra.dijkstraKShortestPaths'
+-- | Uses 'Dijkstra.dijkstraKShortestPaths'
 queryAllEvenFaster
   :: forall s v meta.
      ( Ord v
@@ -398,11 +403,10 @@ queryAllEvenFaster
   -> ([NE.NonEmpty meta] -> String)
   -> Int -- ^ max number of results
   -> DG.Digraph s v (NE.NonEmpty meta)
-  -> ST.ST s [[DG.IdxEdge v (NE.NonEmpty meta)]]
+  -> ST.ST s [([DG.IdxEdge v (NE.NonEmpty meta)], Double)]
 queryAllEvenFaster f w src dst disp maxCount g = do
-  g' <- DG.freeze g >>= DG.thaw -- TODO: why is this necessary?
-  Dijkstra.runDijkstra g' f w $
-    fromMaybe [] <$> Dijkstra.dijkstraKShortestPaths maxCount (src, dst)
+  Dijkstra.runDijkstra g f w $
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 3 (src, dst)
 
 -- ### Specialization
 
@@ -418,4 +422,4 @@ type Meta = TypedFunction
     -> ([NE.NonEmpty Meta] -> String)
     -> Int
     -> DG.Digraph s Vertex (NE.NonEmpty Meta)
-    -> ST.ST s [[DG.IdxEdge Vertex (NE.NonEmpty Meta)]] #-}
+    -> ST.ST s [([DG.IdxEdge Vertex (NE.NonEmpty Meta)], Double)] #-}
