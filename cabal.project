@@ -1,6 +1,5 @@
 packages:
     *.cabal
-    -- /home/parallels/code/bellman-ford
 
 optimization: 2
 
@@ -12,7 +11,7 @@ source-repository-package
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/bellman-ford.git
-    tag: 4df40f6b3337f5256fe9ec90ab5ec3d46fc8e3b1
+    tag: fb01e4a874f1fcf9004f30dff56a72a35282911e
 
 source-repository-package
     type: git

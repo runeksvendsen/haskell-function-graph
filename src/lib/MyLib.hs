@@ -203,22 +203,30 @@ runQueryAllST
   -> ST s [([TypedFunction], Double)]
 runQueryAllST maxCount (src, dst) graph = do
   res <- queryAllEvenFaster weightCombine' initialWeight src dst dispFun maxCount graph
-  let res' :: [([NE.NonEmpty TypedFunction], Double)]
-      res' = map (first $ map DG.eMeta) res
+  let res' :: [[NE.NonEmpty TypedFunction]]
+      res' = map (map DG.eMeta . fst) res
+
+      removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
+      removeNonMin functions =
+        let minWeight = minimum $ map (functionWeight (src, dst)) (NE.toList functions)
+            filterFun functionNE = functionWeight (src, dst) functionNE == minWeight
+        in NE.fromList $ NE.filter filterFun functions
+
   pure
+    $ map (,0) -- TMP!
     $ sortOn sortOnFun
     $ concat
-    $ map (\(doubleList, weight) -> map (,weight) doubleList)
-    $ map (first spTreeToPaths) res'
+    $ map spTreeToPaths
+    $ map (map removeNonMin)
+    $ res'
   where
     debug = False
 
     weightCombine' = weightCombine (src, dst)
 
-    sortOnFun (path, weight) =
-      -- (sum weights, length path, allFunctionsFromSamePackage)
-      ( weight
-      , length path
+    sortOnFun path =
+      ( length path
+      , sum $ map (functionWeight (src, dst)) path
       , if allFromSamePackage path then 0 else 1 :: Int
       )
 
@@ -405,8 +413,8 @@ queryAllEvenFaster
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST.ST s [([DG.IdxEdge v (NE.NonEmpty meta)], Double)]
 queryAllEvenFaster f w src dst disp maxCount g = do
-  Dijkstra.runDijkstra g f w $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 3 (src, dst)
+  Dijkstra.runDijkstraTrace g f w $
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 2 (src, dst)
 
 -- ### Specialization
 
