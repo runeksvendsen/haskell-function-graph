@@ -18,7 +18,7 @@ module MyLib
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
-  , Function(..), TypedFunction, UntypedFunction, functionPackageNoVersion
+  , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
   , Graph, FrozenGraph
   -- * Re-exports
@@ -355,6 +355,26 @@ type TypedFunction = Function (Json.FunctionType FullyQualifiedType)
 
 -- | A untyped 'Function'
 type UntypedFunction = Function ()
+
+-- | A 'TypedFunction' with a pretty 'Show' instance
+newtype PrettyTypedFunction = PrettyTypedFunction { unPrettyTypedFunction :: TypedFunction }
+  deriving (Eq, Ord)
+
+instance Show PrettyTypedFunction where
+  show = prettyFunction . unPrettyTypedFunction
+    where
+      prettyFunction fun =
+        UTF8.decode $ BS.unpack $ BS.concat $
+          [_function_package fun
+          , ":"
+          , _function_module fun
+          , "."
+          , _function_name fun
+          ] ++
+            let sig = _function_typeSig fun
+                arg = unFullyQualifiedType $ Json.functionType_arg sig
+                ret = unFullyQualifiedType $ Json.functionType_ret sig
+            in [" :: ", arg, " -> ", ret]
 
 -- | E.g. "base-4.18.0.0:GHC.Ptr.Ptr zstd-0.1.3.0:Codec.Compression.Zstd.FFI.Types.DDict".
 --   Guaranteed to not be a function type (ie. will not contain any function arrows).
