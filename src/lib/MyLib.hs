@@ -8,6 +8,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 module MyLib
   ( fileReadDeclarationMap
   , withGraphFromFile, withFrozenGraphFromFile
@@ -44,8 +45,8 @@ import Data.Functor ((<&>))
 import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.String (IsString)
-import Control.Monad (guard)
-import Data.List (intersperse, foldl', sortOn)
+import Control.Monad (guard, when)
+import Data.List (intersperse, foldl', sortOn, intercalate)
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
@@ -54,6 +55,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import Data.Bifunctor (first)
+import Debug.Trace (trace, traceM)
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -202,7 +204,7 @@ runQueryAllST
   -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
   -> ST s [([TypedFunction], Double)]
 runQueryAllST maxCount (src, dst) graph = do
-  res <- queryAllEvenFaster weightCombine' initialWeight src dst dispFun maxCount graph
+  res <- queryAllEvenFaster traceFunDebug weightCombine' initialWeight src dst dispFun maxCount graph
   let res' :: [[NE.NonEmpty TypedFunction]]
       res' = map (map DG.eMeta . fst) res
 
@@ -424,7 +426,8 @@ queryAllEvenFaster
      , Show meta
      , Eq meta
      )
-  => (Double -> NE.NonEmpty meta -> Double)
+  => (Dijkstra.TraceEvent v (NE.NonEmpty meta) Double -> ST s ())
+  -> (Double -> NE.NonEmpty meta -> Double)
   -> Double
   -> v -- ^ src
   -> v -- ^ dst
@@ -432,22 +435,89 @@ queryAllEvenFaster
   -> Int -- ^ max number of results
   -> DG.Digraph s v (NE.NonEmpty meta)
   -> ST.ST s [([DG.IdxEdge v (NE.NonEmpty meta)], Double)]
-queryAllEvenFaster f w src dst disp maxCount g = do
-  Dijkstra.runDijkstraTrace g f w $
+queryAllEvenFaster traceFun f w src dst disp maxCount g = do
+  Dijkstra.runDijkstraTraceGeneric traceFun g f w $
     fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 2 (src, dst)
 
--- ### Specialization
+traceFunDebug
+  :: Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
+  -> ST s ()
+traceFunDebug = \case
+    Dijkstra.TraceEvent_Push edge weight pathTo ->
+      maybe (pure ()) traceM (traceInterestingPush (DG.eMeta edge) weight pathTo)
 
-type Vertex = FullyQualifiedType
-type Meta = TypedFunction
+    Dijkstra.TraceEvent_Pop v weight pathTo ->
+      maybe (pure ()) traceM (traceInterestingPop v weight (map DG.eMeta pathTo))
 
-{-# SPECIALISE
-  queryAllEvenFaster
-    :: (Double -> NE.NonEmpty Meta -> Double)
-    -> Double
-    -> Vertex
-    -> Vertex
-    -> ([NE.NonEmpty Meta] -> String)
-    -> Int
-    -> DG.Digraph s Vertex (NE.NonEmpty Meta)
-    -> ST.ST s [([DG.IdxEdge Vertex (NE.NonEmpty Meta)], Double)] #-}
+    Dijkstra.TraceEvent_FoundPath number weight path -> traceM $ unwords
+        [ "Found path no."
+        , show number
+        , "with length"
+        , show weight <> "."
+        , show $ isInterestingPath path
+        ]
+    _ -> pure ()
+  where
+    interestingVertices = Set.fromList $ map FullyQualifiedType
+      [ "bytestring-0.11.4.0:Data.ByteString.Lazy.Internal.ByteString"
+      , "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
+      , "text-2.0.2:Data.Text.Internal.Lazy.Text"
+      , "text-2.0.2:Data.Text.Internal.Text"
+      ]
+
+    interestingFunctions = Set.fromList $
+      [ Function
+          { _function_name = "toStrict"
+          , _function_module = "Data.ByteString"
+          , _function_package = "bytestring-0.11.4.0"
+          , _function_typeSig = Json.FunctionType () ()
+          }
+      , Function
+          { _function_name = "encodeUtf16LE"
+          , _function_module = "Data.Text.Lazy.Encoding"
+          , _function_package = "text-2.0.2"
+          , _function_typeSig = Json.FunctionType () ()
+          }
+      ]
+
+    isInterestingPath
+      :: [DG.IdxEdge FullyQualifiedType (NE.NonEmpty (Function (Json.FunctionType ())))]
+      -> Maybe [[Function (Json.FunctionType ())]]
+    isInterestingPath pathTo =
+      let pathTo' = map DG.eMeta pathTo
+          interestingPath = map (NE.filter $ \function -> function `Set.member` interestingFunctions) pathTo'
+      in if all null interestingPath
+          then Nothing
+          else Just interestingPath
+
+    showInterestingPath :: [[Function (Json.FunctionType ())]] -> String
+    showInterestingPath =
+      intercalate " <-> " . map (maybe "uninteresting" show . listToMaybe)
+
+    traceInterestingPush
+      :: NE.NonEmpty (Function (Json.FunctionType ()))
+      -> Double
+      -> [DG.IdxEdge FullyQualifiedType (NE.NonEmpty (Function (Json.FunctionType ())))]
+      -> Maybe String
+    traceInterestingPush edge weight pathTo = do
+      interestingPath <- isInterestingPath pathTo
+      let interestingEdge = Set.fromList (NE.toList edge) `Set.intersection` interestingFunctions
+      if not $ Set.null interestingEdge
+        then Just $ unwords
+          [ "Queued vertex with prio"
+          , show weight
+          , "to"
+          , show interestingEdge <> "."
+          , show edge <> "."
+          , showInterestingPath interestingPath
+          ]
+        else Nothing
+
+    traceInterestingPop v weight pathTo =
+      if v `Set.member` interestingVertices && error "TODO"
+        then Just $ unwords $
+          [ "Popped vertex with prio"
+          , show weight <> ":"
+          , show v <> "."
+          ]
+        else Nothing
