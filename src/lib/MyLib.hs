@@ -55,6 +55,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import Debug.Trace (traceM)
+import Control.Applicative ((<|>))
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -444,7 +445,7 @@ traceFunDebug
 traceFunDebug = \case
     Dijkstra.TraceEvent_Init srcVertex _ -> traceM $ unwords
       [ "Starting Bellman-Ford for source vertex"
-      , bsToStr (unFullyQualifiedType (fst srcVertex)) <> "."
+      , bsToStr (unFullyQualifiedType (fst srcVertex))
       ]
 
     Dijkstra.TraceEvent_Push edge weight pathTo ->
@@ -457,9 +458,17 @@ traceFunDebug = \case
         [ "Found path no."
         , show number
         , "with length"
+        , show $ length path
+        , "and weight"
         , show weight <> "."
-        , showInterestingPath $ isInterestingPath path
+        , "Paths:\n"
+        , let allPaths = spTreeToPaths (map DG.eMeta path)
+          in unlines $ map (("\t" <>) . renderComposedFunctionsStr) allPaths -- TODO: why wrong order?
         ]
+
+    -- Dijkstra.TraceEvent_Relax edge weight ->
+    --   maybe (pure ()) traceM (traceInterestingRelax edge weight)
+
     _ -> pure ()
   where
     interestingVertices = Set.fromList $ map FullyQualifiedType
@@ -488,9 +497,9 @@ traceFunDebug = \case
       :: [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)]
       -> (Maybe [[TypedFunction]], [FullyQualifiedType])
     isInterestingPath pathTo =
-      let pathTo' = map DG.eMeta pathTo
-          interestingPath = map (NE.filter $ \function -> fmap void function `Set.member` interestingFunctions) pathTo'
-          pathTypes = maybe id (\idxEdge -> (DG.eFrom idxEdge :)) (listToMaybe pathTo) $ map DG.eTo pathTo
+      let pathTo' = reverse pathTo
+          interestingPath = map (NE.filter $ \function -> fmap void function `Set.member` interestingFunctions) (map DG.eMeta pathTo')
+          pathTypes = maybe id (\idxEdge -> (DG.eFrom idxEdge :)) (listToMaybe pathTo) $ map DG.eTo pathTo'
       in if all null interestingPath
           then (Nothing, pathTypes)
           else (Just interestingPath, pathTypes)
@@ -498,11 +507,12 @@ traceFunDebug = \case
     showInterestingPath :: (Maybe [[TypedFunction]], [FullyQualifiedType]) -> String
     showInterestingPath (mFunctions, types) =
       let mkFunctionsStr =
-            intercalate " <- " . map (maybe "uninteresting" (bsToStr . renderFunction) . listToMaybe)
-          typeBs = BS.intercalate " <- " $ map unFullyQualifiedType types
-      in "( " <> maybe "" (\fns -> mkFunctionsStr fns <> " :: ") mFunctions <> bsToStr typeBs <> " )"
-
-    typedToUntyped = NE.map (fmap void)
+            intercalate " -> " . map (maybe "uninteresting" (bsToStr . renderFunction) . listToMaybe)
+          typeBs = BS.intercalate " -> " $ map unFullyQualifiedType types
+          mkFinalString str
+            | null types = "no path"
+            | otherwise = str
+      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> bsToStr typeBs <> ")"
 
     traceInterestingPush
       :: DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -510,26 +520,23 @@ traceFunDebug = \case
       -> [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)]
       -> Maybe String
     traceInterestingPush edge' weight pathTo = do
-      let edge = DG.eMeta edge'
       let interestingPath@(mInterestingPath, _) = isInterestingPath pathTo
-      _ <- mInterestingPath
-      let interestingEdge = Set.fromList (NE.toList $ typedToUntyped edge) `Set.intersection` interestingFunctions
-      if not $ Set.null interestingEdge
-        then Just $ unwords
+          interestingEdge@(mInterestingEdge, _) = isInterestingPath [edge']
+      -- trace either an interesting pathTo or an interesting edge
+      void $ mInterestingPath <|> mInterestingEdge
+      Just $ unwords
           [ "Queued vertex with prio"
           , show weight
           , "to"
           , bsToStr $ unFullyQualifiedType $ DG.eTo edge'
           , "through edge"
-          , bsToStr $ BS.intercalate "/" (map renderFunction $ Set.toList interestingEdge) <> "."
+          , showInterestingPath interestingEdge <> "."
           , "Path to 'from':"
           , showInterestingPath interestingPath
           ]
-        else Nothing
 
     traceInterestingPop v weight pathTo = do
       let interestingPath@(mInterestingPath, _) = isInterestingPath pathTo
-      _ <- mInterestingPath
       if v `Set.member` interestingVertices
         then Just $ unwords
           [ "Popped vertex with prio"
@@ -539,6 +546,17 @@ traceFunDebug = \case
           , showInterestingPath interestingPath
           ]
         else Nothing
+
+    -- traceInterestingRelax edge weight = do
+    --   let interestingPath@(mInterestingPath, _) = isInterestingPath [edge]
+    --   void mInterestingPath
+    --   Just $ unwords
+    --     [ "Relaxing edge", showInterestingPath interestingPath <> "."
+    --     , "Current 'distTo' for"
+    --     , showIndexedVertex (DG.eTo edge, DG.eToIdx edge)
+    --     , "is"
+    --     , show distToTo <> "."
+    --     ]
 
 bsToStr :: BSC8.ByteString -> String
 bsToStr = UTF8.decode . BS.unpack
