@@ -499,7 +499,7 @@ traceFunDebug = \case
     isInterestingPath pathTo =
       let pathTo' = reverse pathTo
           interestingPath = map (NE.filter $ \function -> fmap void function `Set.member` interestingFunctions) (map DG.eMeta pathTo')
-          pathTypes = maybe id (\idxEdge -> (DG.eFrom idxEdge :)) (listToMaybe pathTo) $ map DG.eTo pathTo'
+          pathTypes = maybe id (\idxEdge -> (DG.eFrom idxEdge :)) (listToMaybe pathTo') $ map DG.eTo pathTo'
       in if all null interestingPath
           then (Nothing, pathTypes)
           else (Just interestingPath, pathTypes)
