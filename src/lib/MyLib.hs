@@ -437,7 +437,7 @@ queryAllEvenFaster
   -> ST.ST s [([DG.IdxEdge v (NE.NonEmpty meta)], Double)]
 queryAllEvenFaster traceFun f w src dst disp maxCount g = do
   Dijkstra.runDijkstraTraceGeneric traceFun g f w $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 2 (src, dst)
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 1 (src, dst)
 
 traceFunDebug
   :: Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
