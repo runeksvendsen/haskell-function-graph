@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 module MyLib
@@ -14,7 +15,7 @@ module MyLib
   , withGraphFromFile, withFrozenGraphFromFile
   , buildGraph
   , buildGraphMut
-  , runQueryAll, runQueryAllST
+  , runQueryAll, runQueryAllST, runQuery, runQueryTrace
   , runPrintQueryAll
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
@@ -136,7 +137,9 @@ runQueryAll
   -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
   -> [([TypedFunction], Double)]
 runQueryAll maxCount (src, dst) graph =
-  ST.runST $ DG.thaw graph >>= runQueryAllST maxCount (src, dst)
+  ST.runST $ do
+    g <- DG.thaw graph
+    runQueryAllST (Dijkstra.runDijkstra g) maxCount (src, dst)
 
 -- | Build an immutable graph
 buildGraph
@@ -198,13 +201,35 @@ buildGraphMut =
         . map declarationMapJsonToFunctions
         . filter (not . isExcludedPackage . Json.declarationMapJson_package)
 
+-- | Passed to 'runQueryAllST' to run without tracing
+runQuery
+  :: DG.Digraph s v meta
+  -> (Double -> meta -> Double)
+  -> Double
+  -> Dijkstra.Dijkstra s v meta a
+  -> ST s a
+runQuery = Dijkstra.runDijkstra
+
+-- | Passed to 'runQueryAllST' to run with tracing turned on
+runQueryTrace
+  :: DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> (Double -> NE.NonEmpty TypedFunction -> Double)
+  -> Double
+  -> Dijkstra.Dijkstra s FullyQualifiedType (NE.NonEmpty TypedFunction) a
+  -> ST s a
+runQueryTrace = Dijkstra.runDijkstraTraceGeneric traceFunDebug
+
 runQueryAllST
-  :: Int
+  :: ( v ~ FullyQualifiedType
+     , meta ~ NE.NonEmpty TypedFunction
+     )
+  => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST s a)
+  -> Int
   -> (FullyQualifiedType, FullyQualifiedType)
-  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
   -> ST s [([TypedFunction], Double)]
-runQueryAllST maxCount (src, dst) graph = do
-  res <- queryAllEvenFaster traceFunDebug weightCombine' initialWeight src dst dispFun maxCount graph
+runQueryAllST runner maxCount (src, dst) = do
+  res <- runner weightCombine' initialWeight $
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 1 (src, dst)
   let res' :: [[NE.NonEmpty TypedFunction]]
       res' = map (map DG.eMeta . fst) res
 
@@ -222,8 +247,6 @@ runQueryAllST maxCount (src, dst) graph = do
     $ map (map removeNonMin)
     $ res'
   where
-    debug = False
-
     weightCombine' = weightCombine (src, dst)
 
     sortOnFun path =
@@ -238,16 +261,6 @@ runQueryAllST maxCount (src, dst) graph = do
     allEq :: Eq a => [a] -> Bool
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
-
-    dispFun fns =
-      if debug
-        then show (length fns) <> ":\n" <> disp' fns
-        else ""
-
-    disp' :: [NE.NonEmpty (Function typeSig)] -> String
-    disp' =
-      let sortFun fun = (_function_package fun, _function_module fun, _function_name fun)
-      in unlines . map renderComposedFunctionsStr . sortOn (fmap sortFun . listToMaybe) . spTreeToPaths
 
 -- TODO: why not 0?
 initialWeight :: Double
@@ -416,28 +429,6 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   fromNode = Json.functionType_arg . _function_typeSig
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
-
--- | Uses 'Dijkstra.dijkstraKShortestPaths'
-queryAllEvenFaster
-  :: forall s v meta.
-     ( Ord v
-     , Hashable v
-     , Show v
-     , Show meta
-     , Eq meta
-     )
-  => (Dijkstra.TraceEvent v (NE.NonEmpty meta) Double -> ST s ())
-  -> (Double -> NE.NonEmpty meta -> Double)
-  -> Double
-  -> v -- ^ src
-  -> v -- ^ dst
-  -> ([NE.NonEmpty meta] -> String)
-  -> Int -- ^ max number of results
-  -> DG.Digraph s v (NE.NonEmpty meta)
-  -> ST.ST s [([DG.IdxEdge v (NE.NonEmpty meta)], Double)]
-queryAllEvenFaster traceFun f w src dst disp maxCount g = do
-  Dijkstra.runDijkstraTraceGeneric traceFun g f w $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 1 (src, dst)
 
 traceFunDebug
   :: Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double

@@ -30,7 +30,7 @@ main = MyLib.withGraphFromFile testDataFileName $ \graph -> do
                   MyLib.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
           HSpec.it "contained in top query results" $ do
-            result <- ST.stToIO $ MyLib.Test.queryTest_runQuery test graph
+            result <- ST.stToIO $ MyLib.Test.queryTest_runQuery test (MyLib.runQueryTrace graph)
             Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 MyLib.Test.queryTest_expectedResult test

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 module MyLib.Test
 ( allTestCases
 , case1
@@ -24,12 +25,14 @@ import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
 import qualified Control.Monad.ST as ST
 import Data.Bifunctor (first)
+import qualified Data.Graph.Dijkstra as Dijkstra
 
 data QueryTest = QueryTest
     { queryTest_name :: String
     , queryTest_runQuery
-        :: forall s.
-           MyLib.Digraph s MyLib.FullyQualifiedType (NE.NonEmpty MyLib.TypedFunction)
+        :: forall s v meta.
+           (v ~ MyLib.FullyQualifiedType, meta ~ NE.NonEmpty MyLib.TypedFunction)
+        => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
         -> ST.ST s [(PPFunctions, Double)]
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
@@ -43,12 +46,12 @@ mkTestCase
 mkTestCase k maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQuery = fmap (map (first $ PPFunctions . map void)) . getResults
+        , queryTest_runQuery = \runner ->
+            mapQueryResult . take maxCount <$> MyLib.runQueryAllST runner k (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
-    getResults graph =
-      take maxCount <$> MyLib.runQueryAllST k (fst from, fst to) graph
+    mapQueryResult = map (first $ PPFunctions . map void)
 
     fns :: [BSC8.ByteString] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)

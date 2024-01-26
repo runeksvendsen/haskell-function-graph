@@ -30,7 +30,7 @@ main = do
   where
     runQueryAll mutGraph test =
       bench (MyLib.Test.queryTest_name test) $
-        nfAppIO (ST.stToIO . MyLib.Test.queryTest_runQuery test) mutGraph
+        nfAppIO (\g -> ST.stToIO $ MyLib.Test.queryTest_runQuery test (MyLib.runQuery g)) mutGraph
 
     readGraphData fileName =
       either fail pure =<< MyLib.fileReadDeclarationMap fileName
