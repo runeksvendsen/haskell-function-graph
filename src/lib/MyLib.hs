@@ -463,11 +463,8 @@ traceFunDebug = \case
         , show weight <> "."
         , "Paths:\n"
         , let allPaths = spTreeToPaths (map DG.eMeta path)
-          in unlines $ map (("\t" <>) . renderComposedFunctionsStr) allPaths -- TODO: why wrong order?
+          in unlines $ map (("\t" <>) . renderComposedFunctionsStr) allPaths
         ]
-
-    -- Dijkstra.TraceEvent_Relax edge weight ->
-    --   maybe (pure ()) traceM (traceInterestingRelax edge weight)
 
     _ -> pure ()
   where
