@@ -25,7 +25,7 @@ page graph src dst maxCount = pure $ do
         td_ "Function composition"
         td_ "Dependencies"
     tbody_ $
-      forM_ results $ \result ->
+      forM_ (map fst results) $ \result ->
         tr_ $ do
           td_ $ renderResult result
           td_ $
