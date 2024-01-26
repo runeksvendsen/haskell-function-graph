@@ -463,7 +463,11 @@ traceFunDebug = \case
         , show weight <> "."
         , "Paths:\n"
         , let allPaths = spTreeToPaths (map DG.eMeta path)
-          in unlines $ map (("\t" <>) . renderComposedFunctionsStr) allPaths
+              renderTypeSig :: [TypedFunction] -> String
+              renderTypeSig = showTypeSig . toPathTypes
+                (Json.functionType_ret . _function_typeSig)
+                (Json.functionType_arg . _function_typeSig)
+          in unlines $ map (\fn -> "\t" <> renderComposedFunctionsStr fn <> " :: " <> renderTypeSig fn) allPaths
         ]
 
     _ -> pure ()
@@ -491,25 +495,38 @@ traceFunDebug = \case
       ]
 
     isInterestingPath
-      :: [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)]
+      :: [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)] -- ^ in correct order!
       -> (Maybe [[TypedFunction]], [FullyQualifiedType])
     isInterestingPath pathTo =
-      let pathTo' = reverse pathTo
-          interestingPath = map (NE.filter $ \function -> fmap void function `Set.member` interestingFunctions) (map DG.eMeta pathTo')
-          pathTypes = maybe id (\idxEdge -> (DG.eFrom idxEdge :)) (listToMaybe pathTo') $ map DG.eTo pathTo'
+      let interestingPath = map (NE.filter $ \function -> fmap void function `Set.member` interestingFunctions) (map DG.eMeta pathTo)
+          pathTypes = toPathTypes DG.eTo DG.eFrom pathTo
       in if all null interestingPath
           then (Nothing, pathTypes)
           else (Just interestingPath, pathTypes)
+
+    toPathTypes
+      :: (a -> FullyQualifiedType)
+      -> (a -> FullyQualifiedType)
+      -> [a]
+      -> [FullyQualifiedType]
+    toPathTypes getTo getFrom = \case
+      pathTo@(firstEdge:_) ->
+        getFrom firstEdge : map getTo pathTo
+      [] -> []
 
     showInterestingPath :: (Maybe [[TypedFunction]], [FullyQualifiedType]) -> String
     showInterestingPath (mFunctions, types) =
       let mkFunctionsStr =
             intercalate " -> " . map (maybe "uninteresting" (bsToStr . renderFunction) . listToMaybe)
-          typeBs = BS.intercalate " -> " $ map unFullyQualifiedType types
           mkFinalString str
             | null types = "no path"
             | otherwise = str
-      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> bsToStr typeBs <> ")"
+      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> showTypeSig types <> ")"
+
+    showTypeSig :: [FullyQualifiedType] -> String
+    showTypeSig types =
+      let typeBs = BS.intercalate " -> " $ map unFullyQualifiedType types
+      in bsToStr typeBs
 
     traceInterestingPush
       :: DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -517,7 +534,7 @@ traceFunDebug = \case
       -> [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)]
       -> Maybe String
     traceInterestingPush edge' weight pathTo = do
-      let interestingPath@(mInterestingPath, _) = isInterestingPath pathTo
+      let interestingPath@(mInterestingPath, _) = isInterestingPath (reverse pathTo)
           interestingEdge@(mInterestingEdge, _) = isInterestingPath [edge']
       -- trace either an interesting pathTo or an interesting edge
       void $ mInterestingPath <|> mInterestingEdge
@@ -533,7 +550,7 @@ traceFunDebug = \case
           ]
 
     traceInterestingPop v weight pathTo = do
-      let interestingPath@(mInterestingPath, _) = isInterestingPath pathTo
+      let interestingPath = isInterestingPath (reverse pathTo)
       if v `Set.member` interestingVertices
         then Just $ unwords
           [ "Popped vertex with prio"
@@ -543,17 +560,6 @@ traceFunDebug = \case
           , showInterestingPath interestingPath
           ]
         else Nothing
-
-    -- traceInterestingRelax edge weight = do
-    --   let interestingPath@(mInterestingPath, _) = isInterestingPath [edge]
-    --   void mInterestingPath
-    --   Just $ unwords
-    --     [ "Relaxing edge", showInterestingPath interestingPath <> "."
-    --     , "Current 'distTo' for"
-    --     , showIndexedVertex (DG.eTo edge, DG.eToIdx edge)
-    --     , "is"
-    --     , show distToTo <> "."
-    --     ]
 
 bsToStr :: BSC8.ByteString -> String
 bsToStr = UTF8.decode . BS.unpack
