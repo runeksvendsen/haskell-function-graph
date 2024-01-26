@@ -83,7 +83,7 @@ case2 =
 
 case3 :: QueryTest
 case3 =
-  mkTestCase 4 1000
+  mkTestCase 4 26
     (lazyText, strictByteString)
     [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
     , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -96,7 +96,7 @@ case3 =
 
 case4 :: QueryTest
 case4 =
-  mkTestCase 3 100
+  mkTestCase 3 45
     (strictByteString, lazyText)
     [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
     , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
