@@ -10,6 +10,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use concatMap" #-}
 module MyLib
   ( fileReadDeclarationMap
   , withGraphFromFile, withFrozenGraphFromFile
@@ -57,6 +59,7 @@ import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import Debug.Trace (traceM)
 import Control.Applicative ((<|>))
+import Data.Bifunctor (first)
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -230,8 +233,8 @@ runQueryAllST
 runQueryAllST runner maxCount (src, dst) = do
   res <- runner weightCombine' initialWeight $
     fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 1 (src, dst)
-  let res' :: [[NE.NonEmpty TypedFunction]]
-      res' = map (map DG.eMeta . fst) res
+  let res' :: [([NE.NonEmpty TypedFunction], Double)]
+      res' = map (first (map DG.eMeta)) res
 
       removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
       removeNonMin functions =
@@ -240,12 +243,10 @@ runQueryAllST runner maxCount (src, dst) = do
         in NE.fromList $ NE.filter filterFun functions
 
   pure
-    $ map (,0) -- TMP!
-    $ sortOn sortOnFun
+    $ sortOn (sortOnFun . fst)
     $ concat
-    $ map spTreeToPaths
-    $ map (map removeNonMin)
-    $ res'
+    $ map (\(nePath, weight) -> map (,weight) . spTreeToPaths . map removeNonMin $ nePath )
+      res'
   where
     weightCombine' = weightCombine (src, dst)
 
