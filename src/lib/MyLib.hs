@@ -232,7 +232,7 @@ runQueryAllST
   -> ST s [([TypedFunction], Double)]
 runQueryAllST runner maxCount (src, dst) = do
   res <- runner weightCombine' initialWeight $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels (maxCount * 100) 1 (src, dst)
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst)
   let res' :: [([NE.NonEmpty TypedFunction], Double)]
       res' = map (first (map DG.eMeta)) res
 

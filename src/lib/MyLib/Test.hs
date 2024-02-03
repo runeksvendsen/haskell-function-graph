@@ -39,15 +39,14 @@ data QueryTest = QueryTest
 
 mkTestCase
   :: Int
-  -> Int
   -> ((MyLib.FullyQualifiedType, String), (MyLib.FullyQualifiedType, String))
   -> [BSC8.ByteString]
   -> QueryTest
-mkTestCase k maxCount (from, to) expectedList =
+mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
         , queryTest_runQuery = \runner ->
-            mapQueryResult . take maxCount <$> MyLib.runQueryAllST runner k (fst from, fst to)
+            mapQueryResult . take maxCount <$> MyLib.runQueryAllST runner maxCount (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
@@ -71,19 +70,19 @@ allTestCases =
 
 case1 :: QueryTest
 case1 =
-  mkTestCase 1 1
+  mkTestCase 1
     (strictByteString, string)
     ["bytestring-0.11.4.0:Data.ByteString.Char8.unpack"]
 
 case2 :: QueryTest
 case2 =
-    mkTestCase 1 1
+    mkTestCase 1
         (string, strictByteString)
         ["bytestring-0.11.4.0:Data.ByteString.Char8.pack"]
 
 case3 :: QueryTest
 case3 =
-  mkTestCase 4 26
+  mkTestCase 26
     (lazyText, strictByteString)
     [ "bytestring-0.11.4.0:Data.ByteString.Char8.pack . text-2.0.2:Data.Text.Lazy.unpack"
     , "text-2.0.2:Data.Text.Encoding.encodeUtf16BE . text-2.0.2:Data.Text.Lazy.toStrict"
@@ -96,7 +95,7 @@ case3 =
 
 case4 :: QueryTest
 case4 =
-  mkTestCase 3 45
+  mkTestCase 45
     (strictByteString, lazyText)
     [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
     , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
