@@ -18,7 +18,6 @@ module FunGraph
   , buildGraph
   , buildGraphMut
   , runQueryAll, runQueryAllST, runQuery, runQueryTrace
-  , runPrintQueryAll
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
@@ -86,28 +85,6 @@ withFrozenGraphFromFile
 withFrozenGraphFromFile fileName f =
   withGraphFromFile fileName $ \mutGraph ->
     ST.stToIO (DG.freeze mutGraph) >>= f
-
-runPrintQueryAll
-  :: Int
-  -> [Json.DeclarationMapJson String]
-  -> (FullyQualifiedType, FullyQualifiedType)
-  -> IO ()
-runPrintQueryAll maxCount declarationMapJsonList (src, dst) = do
-  putStrLn $ unwords
-    [ "Finding the"
-    , show maxCount
-    , "first paths from"
-    , bsToStr $ unFullyQualifiedType src
-    , "to"
-    , bsToStr $ unFullyQualifiedType dst
-    ]
-  let !res = runQueryAll maxCount (src, dst) (ST.runST $ buildGraph declarationMapJsonList)
-  putStrLn ""
-  putStrLn $ disp' res
-  putStrLn $ "Got " <> show (length res) <> " results"
-  where
-    disp' :: [([TypedFunction], Double)] -> String
-    disp' = unlines . map (\(path, weight) -> show weight <> ": " <> renderComposedFunctionsStr path)
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
