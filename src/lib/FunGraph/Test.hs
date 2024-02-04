@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
-module MyLib.Test
+module FunGraph.Test
 ( allTestCases
 , case1
 , case2
@@ -13,8 +13,8 @@ module MyLib.Test
 )
 where
 
-import qualified MyLib
-import MyLib.Examples
+import qualified FunGraph
+import FunGraph.Examples
 
 import Data.Functor (void)
 import Data.Maybe (fromMaybe)
@@ -31,7 +31,7 @@ data QueryTest = QueryTest
     { queryTest_name :: String
     , queryTest_runQuery
         :: forall s v meta.
-           (v ~ MyLib.FullyQualifiedType, meta ~ NE.NonEmpty MyLib.TypedFunction)
+           (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
         => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
         -> ST.ST s [(PPFunctions, Double)]
     , queryTest_expectedResult :: Set.Set PPFunctions
@@ -39,14 +39,14 @@ data QueryTest = QueryTest
 
 mkTestCase
   :: Int
-  -> ((MyLib.FullyQualifiedType, String), (MyLib.FullyQualifiedType, String))
+  -> ((FunGraph.FullyQualifiedType, String), (FunGraph.FullyQualifiedType, String))
   -> [BSC8.ByteString]
   -> QueryTest
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
         , queryTest_runQuery = \runner ->
-            mapQueryResult . take maxCount <$> MyLib.runQueryAllST runner maxCount (fst from, fst to)
+            mapQueryResult . take maxCount <$> FunGraph.runQueryAllST runner maxCount (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
@@ -55,10 +55,10 @@ mkTestCase maxCount (from, to) expectedList =
     fns :: [BSC8.ByteString] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)
 
-    fn :: BSC8.ByteString -> NE.NonEmpty MyLib.UntypedFunction
+    fn :: BSC8.ByteString -> NE.NonEmpty FunGraph.UntypedFunction
     fn bs = fromMaybe
       (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
-      (MyLib.parseComposedFunctions bs)
+      (FunGraph.parseComposedFunctions bs)
 
 allTestCases :: [QueryTest]
 allTestCases =
@@ -119,10 +119,10 @@ case4 =
     , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32LE . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
     ]
 
-newtype PPFunctions = PPFunctions { unPPFunctions :: [MyLib.Function ()] }
+newtype PPFunctions = PPFunctions { unPPFunctions :: [FunGraph.Function ()] }
   deriving (Eq, Ord, Generic)
 
 instance NFData PPFunctions
 
 instance Show PPFunctions where
-  show = MyLib.renderComposedFunctionsStr . unPPFunctions
+  show = FunGraph.renderComposedFunctionsStr . unPPFunctions

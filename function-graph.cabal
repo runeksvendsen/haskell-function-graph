@@ -14,9 +14,9 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  MyLib
-                      MyLib.Examples
-                      MyLib.Test
+    exposed-modules:  FunGraph
+                      FunGraph.Examples
+                      FunGraph.Test
     build-depends:    base
                     , hashable
                     , bellman-ford

@@ -11,12 +11,12 @@ import Lucid.Htmx
 import qualified Data.Text as T
 import Servant.Server (Handler)
 import qualified Server.Pages.Search as Search
-import qualified MyLib.Examples as Examples
-import qualified MyLib
+import qualified FunGraph.Examples as Examples
+import qualified FunGraph
 import Control.Monad (forM_)
 import Data.Maybe (fromMaybe)
 
-handler :: Html () -> MyLib.FrozenGraph -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
+handler :: Html () -> FunGraph.FrozenGraph -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
 handler appendToHead graph mSrc mDst mLimit =
   case (mSrc, mDst) of
     (Just src, Just dst) -> do
@@ -57,4 +57,4 @@ suggestions :: T.Text -> Html ()
 suggestions id' = do
   datalist_ [id_ id'] $ do
     forM_ Examples.all $ \example ->
-       option_ [value_ $ MyLib.fullyQualifiedTypeToText (fst example)] ""
+       option_ [value_ $ FunGraph.fullyQualifiedTypeToText (fst example)] ""

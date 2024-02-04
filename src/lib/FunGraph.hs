@@ -12,7 +12,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use concatMap" #-}
-module MyLib
+module FunGraph
   ( fileReadDeclarationMap
   , withGraphFromFile, withFrozenGraphFromFile
   , buildGraph
@@ -75,8 +75,8 @@ withGraphFromFile
   -> (Graph ST.RealWorld -> IO a)
   -> IO a
 withGraphFromFile fileName f = do
-  graphData <- either fail pure =<< MyLib.fileReadDeclarationMap fileName
-  graph <- ST.stToIO $ MyLib.buildGraphMut graphData
+  graphData <- either fail pure =<< FunGraph.fileReadDeclarationMap fileName
+  graph <- ST.stToIO $ FunGraph.buildGraphMut graphData
   f graph
 
 withFrozenGraphFromFile

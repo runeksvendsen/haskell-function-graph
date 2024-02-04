@@ -11,12 +11,12 @@ import Lucid
 import Control.Monad (forM_)
 import qualified Data.Text as T
 import Servant.Server (Handler)
-import qualified MyLib
+import qualified FunGraph
 import Data.List (intersperse)
 import qualified Data.Text.Encoding as TE
 import Data.Containers.ListUtils (nubOrd)
 
-page :: MyLib.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
+page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
 page graph src dst maxCount = pure $ do
   p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
   table_ $ do
@@ -33,23 +33,23 @@ page graph src dst maxCount = pure $ do
               intersperse ", " $
                 map (mono . toHtml . TE.decodeUtf8) $
                   nubOrd $
-                    map MyLib.functionPackageNoVersion result
+                    map FunGraph.functionPackageNoVersion result
   where
     results =
-      take (fromIntegral maxCount) $ MyLib.runQueryAll
+      take (fromIntegral maxCount) $ FunGraph.runQueryAll
         (fromIntegral maxCount)
-        (MyLib.textToFullyQualifiedType src, MyLib.textToFullyQualifiedType dst)
+        (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
         graph
 
-    renderResult :: [MyLib.TypedFunction] -> Html ()
+    renderResult :: [FunGraph.TypedFunction] -> Html ()
     renderResult fns =
-      let nameWithTypeLst = map MyLib.renderTypedFunction (reverse fns)
+      let nameWithTypeLst = map FunGraph.renderTypedFunction (reverse fns)
           renderSingleFn (name, (fromTy, toTy)) =
             let typeSig = T.unwords $
                   [ "::"
-                  , MyLib.fullyQualifiedTypeToText fromTy
+                  , FunGraph.fullyQualifiedTypeToText fromTy
                   , "->"
-                  , MyLib.fullyQualifiedTypeToText toTy
+                  , FunGraph.fullyQualifiedTypeToText toTy
                   ]
             in mono (toHtml name) `with` [title_ typeSig]
       in mconcat $ intersperse (mono " . ") $ map renderSingleFn nameWithTypeLst

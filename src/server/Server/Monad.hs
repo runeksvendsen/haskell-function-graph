@@ -6,7 +6,7 @@ module Server.Monad
 )
 where
 
-import MyLib
+import FunGraph
 import Control.Monad.Reader (Reader)
 import qualified Control.Monad.Reader as R
 import Data.Functor.Identity (runIdentity)

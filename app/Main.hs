@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import qualified MyLib
+import qualified FunGraph
 import qualified System.Environment as Env
 import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
@@ -29,7 +29,7 @@ main :: IO ()
 main = do
   [fileName, timoutMillisStr] <- Env.getArgs
   timoutMillis <- maybe (fail $ "Invalid timeout: " <> show timoutMillisStr) pure (readMaybe timoutMillisStr)
-  MyLib.withGraphFromFile fileName $ \graph -> do
+  FunGraph.withGraphFromFile fileName $ \graph -> do
     vertices <- ST.stToIO $ DG.vertexLabels graph
     forM_ vertices $ \src ->
       forM_ vertices $ \dst -> do
@@ -37,13 +37,13 @@ main = do
         case res of
           [] -> pure ()
           (fns,_):_ -> when (length fns > 5) $ do
-            putStrLn . ((show (length fns) <> " ") <>) . MyLib.bsToStr $
+            putStrLn . ((show (length fns) <> " ") <>) . FunGraph.bsToStr $
               mconcat
-                [ MyLib.unFullyQualifiedType src
+                [ FunGraph.unFullyQualifiedType src
                 , " -> "
-                , MyLib.unFullyQualifiedType dst
+                , FunGraph.unFullyQualifiedType dst
                 , " : "
-                , MyLib.renderComposedFunctions fns
+                , FunGraph.renderComposedFunctions fns
                 ]
   where
     maxCount = 1
@@ -51,7 +51,7 @@ main = do
     query timoutMillis graph src dst = fmap (fromMaybe []) $
       System.Timeout.timeout (timoutMillis * 1000) $
         ST.stToIO $
-          MyLib.runQueryAllST (MyLib.runQuery graph) maxCount (src, dst)
+          FunGraph.runQueryAllST (FunGraph.runQuery graph) maxCount (src, dst)
 
 data ListMaxMin a = ListMaxMin
   !Int -- capacity

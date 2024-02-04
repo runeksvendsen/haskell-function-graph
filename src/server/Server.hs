@@ -7,16 +7,16 @@ import qualified Server.Pages.Root
 import Servant
 import Network.Wai.Handler.Warp (run)
 import Server.Api
-import qualified MyLib
+import qualified FunGraph
 import Lucid
 
 main :: Html () -> Int -> FilePath -> IO ()
 main appendToHead port graphDataFilename =
-  MyLib.withFrozenGraphFromFile graphDataFilename $ \graph ->
+  FunGraph.withFrozenGraphFromFile graphDataFilename $ \graph ->
     run port $
       app appendToHead graph
 
-app :: Html () -> MyLib.FrozenGraph -> Application
+app :: Html () -> FunGraph.FrozenGraph -> Application
 app appendToHead graph =
   serve myApi server
   where
