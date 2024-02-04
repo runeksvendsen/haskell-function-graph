@@ -208,7 +208,7 @@ runQueryAllST
   -> (FullyQualifiedType, FullyQualifiedType)
   -> ST s [([TypedFunction], Double)]
 runQueryAllST runner maxCount (src, dst) = do
-  res <- runner weightCombine' initialWeight $
+  res <- runner weightCombine initialWeight $
     fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst)
   let res' :: [([NE.NonEmpty TypedFunction], Double)]
       res' = map (first (map DG.eMeta)) res
@@ -225,8 +225,6 @@ runQueryAllST runner maxCount (src, dst) = do
     $ map (\(nePath, weight) -> map (,weight) . spTreeToPaths . map removeNonMin $ nePath )
       res'
   where
-    weightCombine' = weightCombine (src, dst)
-
     sortOnFun path =
       ( length path
       , sum $ map (functionWeight (src, dst)) path
@@ -240,19 +238,18 @@ runQueryAllST runner maxCount (src, dst) = do
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
 
-initialWeight :: Double
-initialWeight = 0
+    initialWeight :: Double
+    initialWeight = 0
 
-weightCombine
-  :: (FullyQualifiedType, FullyQualifiedType)
-  -> Double
-  -> NE.NonEmpty TypedFunction
-  -> Double
-weightCombine (src, dst) w functions =
-  w + edgeWeightNE
-  where
-    edgeWeightNE =
-      minimum $ map (functionWeight (src, dst)) (NE.toList functions)
+    weightCombine
+      :: Double
+      -> NE.NonEmpty TypedFunction
+      -> Double
+    weightCombine w functions =
+      w + edgeWeightNE
+      where
+        edgeWeightNE =
+          minimum $ map (functionWeight (src, dst)) (NE.toList functions)
 
 -- | A function that takes a single non-function argument and returns a non-function value.
 --
