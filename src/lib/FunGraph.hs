@@ -240,7 +240,6 @@ runQueryAllST runner maxCount (src, dst) = do
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
 
--- TODO: why not 0?
 initialWeight :: Double
 initialWeight = 0
 
