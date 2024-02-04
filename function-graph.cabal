@@ -68,7 +68,7 @@ executable function-graph
     import:           warnings
     main-is:          Main.hs
     hs-source-dirs:   app
-    build-depends:    base, function-graph
+    build-depends:    base, function-graph, bellman-ford, containers
     default-language: Haskell2010
 
 executable benchmark

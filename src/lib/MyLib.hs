@@ -25,6 +25,7 @@ module MyLib
   , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
   , Graph, FrozenGraph
+  , bsToStr
   -- * Re-exports
   , Json.FunctionType
   , DG.IDigraph, DG.Digraph
