@@ -55,6 +55,16 @@ instance NFData a => NFData (Function a)
 instance Functor Function where
   fmap f fn = fn { _function_typeSig = f $ _function_typeSig fn }
 
+-- The '_function_package' field without the version.
+--
+-- >>> functionPackageNoVersion $ Function "" "" "text-1.2.4.1" ()
+-- "text"
+--
+-- >>> functionPackageNoVersion $ Function "" "" "pa-prelude-0.1.0.0" ()
+-- "pa-prelude"
+--
+-- >>> functionPackageNoVersion $ Function "" "" "blah-1" ()
+-- "blah"
 functionPackageNoVersion
   :: Show typeSig
   => Function typeSig
