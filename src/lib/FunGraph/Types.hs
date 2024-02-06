@@ -15,7 +15,7 @@ module FunGraph.Types
   , parseComposedFunctions
   , renderFunction
   , renderTypedFunction
-  , parseFunction
+  , parseIdentifier, parseFunction
   , fqtPackage
   , textToFullyQualifiedType
   , fullyQualifiedTypeToText
@@ -123,20 +123,23 @@ renderTypedFunction fn =
     sig = _function_typeSig fn
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'
-parseFunction :: BS.ByteString -> Maybe UntypedFunction
-parseFunction bs =
+parseFunction :: BSC8.ByteString -> Maybe UntypedFunction
+parseFunction bs = do
+  (name, moduleName, pkg) <- parseIdentifier bs
+  pure $ Function name moduleName pkg ()
+
+-- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped identifier
+parseIdentifier
+  :: BS.ByteString
+  -> Maybe (BSC8.ByteString, BSC8.ByteString, BSC8.ByteString)
+  -- ^ (name, module name, package). E.g. ("encodeUtf16BE", "Data.Text.Encoding", "text-2.0.2")
+parseIdentifier bs =
   case BSC8.split ':' bs of
     [pkg, moduleAndName] -> do
       (moduleNameWithSuffix, name) <- spanEndNonEmpty (not . (== '.')) moduleAndName
       moduleName <- BS.stripSuffix "." moduleNameWithSuffix
       guard $ not (BS.null moduleName)
-      pure $
-        Function
-          { _function_name = name
-          , _function_module = moduleName
-          , _function_package = pkg
-          , _function_typeSig = ()
-          }
+      pure (name, moduleName, pkg)
     _ -> Nothing
   where
     -- A version of 'spanEnd' that does not return the empty ByteString
