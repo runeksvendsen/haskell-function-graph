@@ -9,7 +9,7 @@ module FunGraph.Types
   , UntypedFunction
   , PrettyTypedFunction(..)
   , FullyQualifiedType(..)
-  , functionPackageNoVersion
+  , functionPackageNoVersion, packageNoVersion
   , renderComposedFunctions
   , renderComposedFunctionsStr
   , parseComposedFunctions
@@ -55,26 +55,35 @@ instance NFData a => NFData (Function a)
 instance Functor Function where
   fmap f fn = fn { _function_typeSig = f $ _function_typeSig fn }
 
--- The '_function_package' field without the version.
---
--- >>> functionPackageNoVersion $ Function "" "" "text-1.2.4.1" ()
--- "text"
---
--- >>> functionPackageNoVersion $ Function "" "" "pa-prelude-0.1.0.0" ()
--- "pa-prelude"
---
--- >>> functionPackageNoVersion $ Function "" "" "blah-1" ()
--- "blah"
+-- The 'packageNoVersion' function applied to the '_function_package' field.
 functionPackageNoVersion
   :: Show typeSig
   => Function typeSig
   -> BS.ByteString
-functionPackageNoVersion fn =
-  case Search.split "-" (_function_package fn) of
+functionPackageNoVersion =
+  packageNoVersion . _function_package
+
+-- | Extract the package name from a package identifer of the form "text-1.2.4.1" (returns "text").
+--
+--   Throws an error in case the package identifier does not contain a version.
+--
+-- >>> packageNoVersion "text-1.2.4.1"
+-- "text"
+--
+-- >>> packageNoVersion "pa-prelude-0.1.0.0"
+-- "pa-prelude"
+--
+-- >>> packageNoVersion "blah-1"
+-- "blah"
+packageNoVersion
+  :: BS.ByteString
+  -> BS.ByteString
+packageNoVersion packageName =
+  case Search.split "-" packageName of
     lst | length lst > 1 ->
       BS.concat $ intersperse "-" (init lst)
     _ ->
-      error $ "Invalid package name for Function: " <> show fn
+      error $ bsToStr $ "Missing version in package identifier: " <> packageName
 
 -- | Render composed functions.
 --

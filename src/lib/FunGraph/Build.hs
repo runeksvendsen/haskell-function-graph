@@ -20,6 +20,8 @@ import qualified Control.Monad.ST as ST
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
+import qualified Data.ByteString.Char8 as BSC8
+import qualified Codec.Binary.UTF8.String as UTF8
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -62,23 +64,23 @@ buildGraphMut =
   where
     excludeTypes = []
 
-    -- TODO: no version number
     excludePackages =
-      [ "basic-prelude-0.7.0"
-      , "incipit-base-0.5.1.0"
-      , "incipit-core-0.5.1.0"
-      , "rebase-1.20"
-      , "rerebase-1.20"
-      , "rio-0.1.22.0"
-      , "pa-prelude-0.1.0.0"
-      , "shakers-0.0.50" -- NOTE: re-exports all of basic-prelude:BasicPrelude
+      [ "basic-prelude"
+      , "incipit-base"
+      , "incipit-core"
+      , "rebase"
+      , "rerebase"
+      , "rio"
+      , "pa-prelude"
+      , "shakers" -- NOTE: re-exports all of basic-prelude:BasicPrelude
       ]
 
     excludeModulePatterns =
       [ "Internal"
       ]
 
-    isExcludedPackage = (`elem` excludePackages)
+    isExcludedPackage =
+      (`elem` excludePackages) . packageNoVersion . strToBs . Json.declarationMapJson_package
 
     isExcluded :: TypedFunction -> Bool
     isExcluded function =
@@ -100,4 +102,7 @@ buildGraphMut =
         . Set.fromList
         . nubOrdOn functionIdentity
         . filter (not . isExcluded)
-        . concatMap declarationMapJsonToFunctions . filter (not . isExcludedPackage . Json.declarationMapJson_package)
+        . concatMap declarationMapJsonToFunctions . filter (not . isExcludedPackage)
+
+strToBs :: String -> BSC8.ByteString
+strToBs = BS.pack . UTF8.encode
