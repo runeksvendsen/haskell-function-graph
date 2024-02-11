@@ -18,7 +18,7 @@ testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
 
 main :: IO ()
-main = FunGraph.withGraphFromFile testDataFileName $ \graph -> do
+main = FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
   graphEdgeSet <- ST.stToIO (DG.toEdges graph)
   let graphEdges = Set.map void $ Set.fromList $ concat $ Set.map (NE.toList . DG.eMeta) graphEdgeSet
   let testCase test =

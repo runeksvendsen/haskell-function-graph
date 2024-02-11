@@ -128,7 +128,9 @@ parseFunction bs = do
   (name, moduleName, pkg) <- parseIdentifier bs
   pure $ Function name moduleName pkg ()
 
--- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped identifier
+-- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped identifier.
+--
+--   TODO: only works for "simple" types, e.g. NOT types of the form @A B@, @(A, B)@ or @[A]@.
 parseIdentifier
   :: BS.ByteString
   -> Maybe (BSC8.ByteString, BSC8.ByteString, BSC8.ByteString)

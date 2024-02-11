@@ -3,19 +3,16 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 module FunGraph
-  ( fileReadDeclarationMap
-  , withGraphFromFile, withFrozenGraphFromFile
-  , buildGraph
-  , buildGraphMut
-  , runQueryAll, runQueryAllST, runQuery, runQueryTrace
+  ( runQueryAll, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
   , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
-  , Graph, FrozenGraph
   , bsToStr
+  , module Export
   -- * Re-exports
   , Json.FunctionType
   , DG.IDigraph, DG.Digraph
@@ -24,15 +21,13 @@ module FunGraph
   ) where
 
 import FunGraph.Types
-import FunGraph.Build
+import FunGraph.Util
+import FunGraph.Build as Export
 import qualified Json
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Graph.Dijkstra as Dijkstra
 import Control.Monad.ST (ST)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSC8
 import Data.Functor (void)
-import qualified Codec.Binary.UTF8.String as UTF8
 import qualified Control.Monad.ST as ST
 import Data.List (foldl', sortOn, intercalate)
 import qualified Data.List.NonEmpty as NE
@@ -102,25 +97,23 @@ runQueryAllST
      )
   => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST s a)
   -> Int
-  -> (FullyQualifiedType, FullyQualifiedType)
+  -> (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
   -> ST s [([TypedFunction], Double)]
-runQueryAllST runner maxCount (src, dst) = do
-  res <- runner weightCombine initialWeight $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst)
-  let res' :: [([NE.NonEmpty TypedFunction], Double)]
-      res' = map (first (map DG.eMeta)) res
+runQueryAllST runner maxCount (src, dst) =
+  queryResultTreeToPaths (src, dst) <$> runQueryTreeST runner maxCount (src, dst)
 
-      removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
-      removeNonMin functions =
-        let minWeight = minimum $ map (functionWeight (src, dst)) (NE.toList functions)
-            filterFun functionNE = functionWeight (src, dst) functionNE == minWeight
-        in NE.fromList $ NE.filter filterFun functions
-
-  pure
-    $ sortOn (sortOnFun . fst)
-    $ concat
-    $ map (\(nePath, weight) -> map (,weight) . spTreeToPaths . map removeNonMin $ nePath )
-      res'
+-- | Convert the "shortest path"-tree produced by 'runQueryTreeST'
+--   to a list of shortest paths.
+--
+--   TODO: avoid sorting
+queryResultTreeToPaths
+  :: (FullyQualifiedType, FullyQualifiedType)
+  -> [([NE.NonEmpty TypedFunction], Double)] -- ^ (src, dst)
+  -> [([TypedFunction], Double)]
+queryResultTreeToPaths (src, dst) res =
+    sortOn (sortOnFun . fst)
+    $ concatMap (\(nePath, weight) -> map (,weight) . spTreeToPaths $ nePath )
+      res
   where
     sortOnFun path =
       ( length path
@@ -134,6 +127,26 @@ runQueryAllST runner maxCount (src, dst) = do
     allEq :: Eq a => [a] -> Bool
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
+
+runQueryTreeST
+  :: ( v ~ FullyQualifiedType
+     , meta ~ NE.NonEmpty TypedFunction
+     )
+  => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST s a)
+  -> Int
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -> ST s [([NE.NonEmpty TypedFunction], Double)]
+runQueryTreeST runner maxCount (src, dst) = do
+  res <- runner weightCombine initialWeight $
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst)
+  pure $ map (first (map (removeNonMin . DG.eMeta))) res
+  where
+    -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
+    removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
+    removeNonMin functions =
+      let minWeight = weightCombine 0 functions
+          filterFun functionNE = functionWeight (src, dst) functionNE == minWeight
+      in NE.fromList $ NE.filter filterFun functions
 
     initialWeight :: Double
     initialWeight = 0
@@ -172,10 +185,7 @@ traceFunDebug = \case
         , show weight <> "."
         , "Paths:\n"
         , let allPaths = spTreeToPaths (map DG.eMeta path)
-              renderTypeSig :: [TypedFunction] -> String
-              renderTypeSig = showTypeSig . toPathTypes
-                (Json.functionType_ret . _function_typeSig)
-                (Json.functionType_arg . _function_typeSig)
+              renderTypeSig = bsToStr . showTypeSig . typedFunctionsPathTypes
           in unlines $ map (\fn -> "\t" <> renderComposedFunctionsStr fn <> " :: " <> renderTypeSig fn) allPaths
         ]
 
@@ -207,21 +217,12 @@ traceFunDebug = \case
       :: [DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)] -- ^ in correct order!
       -> (Maybe [[TypedFunction]], [FullyQualifiedType])
     isInterestingPath pathTo =
-      let interestingPath = map (NE.filter $ \function -> fmap void function `Set.member` interestingFunctions) (map DG.eMeta pathTo)
-          pathTypes = toPathTypes DG.eTo DG.eFrom pathTo
+      let interestingPath =
+            map (NE.filter (\function -> fmap void function `Set.member` interestingFunctions) . DG.eMeta) pathTo
+          pathTypes = idxEdgePathTypes pathTo
       in if all null interestingPath
           then (Nothing, pathTypes)
           else (Just interestingPath, pathTypes)
-
-    toPathTypes
-      :: (a -> FullyQualifiedType)
-      -> (a -> FullyQualifiedType)
-      -> [a]
-      -> [FullyQualifiedType]
-    toPathTypes getTo getFrom = \case
-      pathTo@(firstEdge:_) ->
-        getFrom firstEdge : map getTo pathTo
-      [] -> []
 
     showInterestingPath :: (Maybe [[TypedFunction]], [FullyQualifiedType]) -> String
     showInterestingPath (mFunctions, types) =
@@ -230,12 +231,7 @@ traceFunDebug = \case
           mkFinalString str
             | null types = "no path"
             | otherwise = str
-      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> showTypeSig types <> ")"
-
-    showTypeSig :: [FullyQualifiedType] -> String
-    showTypeSig types =
-      let typeBs = BS.intercalate " -> " $ map unFullyQualifiedType types
-      in bsToStr typeBs
+      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> bsToStr (showTypeSig types) <> ")"
 
     traceInterestingPush
       :: DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -269,6 +265,3 @@ traceFunDebug = \case
           , showInterestingPath interestingPath
           ]
         else Nothing
-
-bsToStr :: BSC8.ByteString -> String
-bsToStr = UTF8.decode . BS.unpack

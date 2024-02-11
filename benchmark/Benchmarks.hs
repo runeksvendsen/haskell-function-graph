@@ -13,11 +13,11 @@ testDataFileName = "data/all3.json"
 main :: IO ()
 main = do
   graphData <- readGraphData testDataFileName
-  mutGraph <- ST.stToIO $ FunGraph.buildGraphMut graphData
+  mutGraph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
   frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
   defaultMain
     [ bgroup "Graph"
-      [ bench "Create" $ nfAppIO (ST.stToIO . void . FunGraph.buildGraphMut) graphData
+      [ bench "Create" $ nfAppIO (ST.stToIO . void . FunGraph.buildGraphMut FunGraph.defaultBuildConfig) graphData
       , bench "Freeze" $ nfAppIO (ST.stToIO . FunGraph.freeze) mutGraph
       , bench "Thaw" $ nfAppIO (void . ST.stToIO . FunGraph.thaw) frozenGraph
       , bench "Thaw+freeze" $ nfAppIO (void . ST.stToIO . (FunGraph.freeze <=< FunGraph.thaw)) frozenGraph
@@ -36,4 +36,4 @@ main = do
       either fail pure =<< FunGraph.fileReadDeclarationMap fileName
 
     buildGraphFreeze graphData =
-      FunGraph.buildGraphMut graphData >>= FunGraph.freeze
+      FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData >>= FunGraph.freeze

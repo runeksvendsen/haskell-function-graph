@@ -12,7 +12,7 @@ import Lucid
 
 main :: Html () -> Int -> FilePath -> IO ()
 main appendToHead port graphDataFilename =
-  FunGraph.withFrozenGraphFromFile graphDataFilename $ \graph ->
+  FunGraph.withFrozenGraphFromFile FunGraph.defaultBuildConfig graphDataFilename $ \graph ->
     run port $
       app appendToHead graph
 
