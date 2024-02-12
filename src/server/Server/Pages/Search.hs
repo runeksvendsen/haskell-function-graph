@@ -51,7 +51,7 @@ page graph src dst maxCount = do
 
     renderResultGraphIO =
       ST.stToIO resultDotGraph
-        >>= Util.graphVizRender Util.Circo Util.Svg
+        >>= Util.graphVizRender Util.Dot Util.Svg
 
     resultDotGraph =
       Util.graphFromQueryResult query
