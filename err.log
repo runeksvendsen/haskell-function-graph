@@ -1,0 +1,20 @@
+parallels@ubuntu-linux-22-04-02-desktop:~$ cabal repl -b typed-process
+Warning: The package list for 'hackage.haskell.org' is 16 days old.
+Run 'cabal update' to get the latest list of available packages.
+Resolving dependencies...
+Build profile: -w ghc-9.4.7 -O1
+In order, the following will be built (use -v for more details):
+ - typed-process-0.2.11.1 (lib) (requires build)
+ - fake-package-0 (lib) (first run)
+Starting     typed-process-0.2.11.1 (lib)
+Building     typed-process-0.2.11.1 (lib)
+Installing   typed-process-0.2.11.1 (lib)
+Completed    typed-process-0.2.11.1 (lib)
+Configuring library for fake-package-0..
+Warning: No exposed modules
+GHCi, version 9.4.7: https://www.haskell.org/ghc/  :? for help
+Loaded GHCi configuration from /tmp/cabal-repl.-210042/setcwd.ghci
+ghci> import System.Process.Typed
+ghci> startProcess $ proc "non-existing-exe" []
+*** Exception: non-existing-exe: startProcess: posix_spawnp: does not exist (No such file or directory)
+
