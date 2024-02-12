@@ -5,15 +5,18 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 module FunGraph
-  ( runQueryAll, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
+  ( -- * Queries
+    runQueryAll, runQueryTree, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
+    -- * Conversions
+  , queryResultTreeToPaths
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
+    -- * Types
   , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion
   , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
-  , bsToStr
-  , module Export
   -- * Re-exports
+  , module Export
   , Json.FunctionType
   , DG.IDigraph, DG.Digraph
   , NE.NonEmpty
@@ -63,6 +66,7 @@ functionWeight (src, dst) function
     fnPkg = _function_package function
     (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
 
+-- | Run 'runQueryAllST'
 runQueryAll
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
@@ -72,6 +76,17 @@ runQueryAll maxCount (src, dst) graph =
   ST.runST $ do
     g <- DG.thaw graph
     runQueryAllST (Dijkstra.runDijkstra g) maxCount (src, dst)
+
+-- | Run 'runQueryTreeST'
+runQueryTree
+  :: Int
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> [([NE.NonEmpty TypedFunction], Double)]
+runQueryTree maxCount (src, dst) graph =
+  ST.runST $ do
+    g <- DG.thaw graph
+    runQueryTreeST (Dijkstra.runDijkstra g) maxCount (src, dst)
 
 -- | Passed to 'runQueryAllST' to run without tracing
 runQuery

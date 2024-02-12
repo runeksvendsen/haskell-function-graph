@@ -7,6 +7,11 @@ module FunGraph.Util
   , showTypeSig
   , graphFromQueryResult
   , graphToDot
+  , graphToDotGraphviz
+  , graphVizRender
+  -- * Re-exports
+  , Data.GraphViz.Commands.GraphvizCommand(..)
+  , Data.GraphViz.Commands.GraphvizOutput(..)
   )
   where
 
@@ -21,6 +26,11 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as LT
 import Control.Monad.ST (ST)
 import qualified Data.Set as Set
+import qualified Data.GraphViz.Types
+import qualified Data.GraphViz.Types.Generalised
+import qualified Data.GraphViz.Commands
+import qualified Data.Text.IO as TIO
+import qualified Data.Text as T
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -63,6 +73,27 @@ graphToDot name =
     (bsToLT . unFullyQualifiedType)
     (bsToLT . _function_name . DG.eMeta)
     (bsToLT name)
+
+graphToDotGraphviz
+  :: BSC8.ByteString
+  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> ST s (Data.GraphViz.Types.Generalised.DotGraph LT.Text)
+graphToDotGraphviz name =
+  fmap Data.GraphViz.Types.parseDotGraph . graphToDot name
+
+graphVizRender
+  :: Data.GraphViz.Commands.GraphvizCommand -- ^ Layout
+  -> Data.GraphViz.Commands.GraphvizOutput -- ^ Output format
+  -> Data.GraphViz.Types.Generalised.DotGraph LT.Text -- ^ Actual graph
+  -> IO T.Text
+graphVizRender graphvizCommand graphvizOutput g =
+  Data.GraphViz.Commands.graphvizWithHandle
+    graphvizCommand
+    g
+    graphvizOutput
+    extractFromHandle
+  where
+    extractFromHandle = TIO.hGetContents
 
 -- | Build a graph from the output of 'FunGraph.runQueryTreeST'
 graphFromQueryResult

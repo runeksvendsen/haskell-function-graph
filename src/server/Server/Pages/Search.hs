@@ -15,30 +15,52 @@ import qualified FunGraph
 import Data.List (intersperse)
 import qualified Data.Text.Encoding as TE
 import Data.Containers.ListUtils (nubOrd)
+import qualified FunGraph.Util as Util
+import qualified Control.Monad.ST as ST
+import Control.Monad.IO.Class (liftIO)
 
 page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
-page graph src dst maxCount = pure $ do
-  p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
-  table_ $ do
-    thead_ $
-      tr_ $ do
-        td_ "Function composition"
-        td_ "Dependencies"
-    tbody_ $
-      forM_ (map fst results) $ \result ->
+page graph src dst maxCount = do
+  resultGraph <- liftIO renderResultGraphIO
+  pure $ do
+    p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
+    table_ $ do
+      thead_ $
         tr_ $ do
-          td_ $ renderResult result
-          td_ $
-            mconcat $
-              intersperse ", " $
-                map (mono . toHtml . TE.decodeUtf8) $
-                  nubOrd $
-                    map FunGraph.functionPackageNoVersion result
+          td_ "Function composition"
+          td_ "Dependencies"
+      tbody_ $
+        forM_ (map fst results) $ \result ->
+          tr_ $ do
+            td_ $ renderResult result
+            td_ $
+              mconcat $
+                intersperse ", " $
+                  map (mono . toHtml . TE.decodeUtf8) $
+                    nubOrd $
+                      map FunGraph.functionPackageNoVersion result
+    h2_ "Result graph"
+    svg_ $ toHtml resultGraph
   where
+    srcDst =
+      (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
+
     results =
-      take (fromIntegral maxCount) $ FunGraph.runQueryAll
+      take (fromIntegral maxCount) $
+        FunGraph.queryResultTreeToPaths srcDst query
+
+    renderResultGraphIO =
+      ST.stToIO resultDotGraph
+        >>= Util.graphVizRender Util.Circo Util.Svg
+
+    resultDotGraph =
+      Util.graphFromQueryResult query
+        >>= Util.graphToDotGraphviz ""
+
+    query =
+      FunGraph.runQueryTree
         (fromIntegral maxCount)
-        (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
+        srcDst
         graph
 
     renderResult :: [FunGraph.TypedFunction] -> Html ()
