@@ -24,12 +24,13 @@ app appendToHead graph =
     myApi :: Proxy Root
     myApi = Proxy
 
-    customCss = style_ $ T.unlines
-      [ -- fix SVG width
-        "max-width: 100%;"
-      -- , "height: auto;"
-      , "display: block;"
+    fixSvgWidth = style_ $ T.unlines
+      [ "svg {"
+      , "  max-width: 100%;"
+      , "  height: auto;"
+      , "  display: block;"
+      , "}"
       ]
 
     server =
-      Server.Pages.Root.handler (customCss <> appendToHead) graph
+      Server.Pages.Root.handler (fixSvgWidth <> appendToHead) graph
