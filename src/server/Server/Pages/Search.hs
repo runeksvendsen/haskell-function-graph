@@ -40,7 +40,7 @@ page graph src dst maxCount = do
                     nubOrd $
                       map FunGraph.functionPackageNoVersion result
     h2_ "Result graph"
-    svg_ $ toHtml resultGraph
+    toHtmlRaw resultGraph -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
   where
     srcDst =
       (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
@@ -51,7 +51,7 @@ page graph src dst maxCount = do
 
     renderResultGraphIO =
       ST.stToIO resultDotGraph
-        >>= Util.graphVizRender Util.Circo Util.Svg
+        >>= Util.graphVizRender Util.Dot Util.Svg
 
     resultDotGraph =
       Util.graphFromQueryResult query
