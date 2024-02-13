@@ -14,8 +14,12 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  MyLib
-                      MyLib.Examples
+    exposed-modules:  FunGraph
+                      FunGraph.Types
+                      FunGraph.Build
+                      FunGraph.Examples
+                      FunGraph.Test
+                      FunGraph.Util
     build-depends:    base
                     , hashable
                     , bellman-ford
@@ -28,6 +32,7 @@ library
                     , pretty-show
                     , stringsearch
                     , deepseq
+                    , graphviz
     hs-source-dirs:   src/lib
     default-language: Haskell2010
 
@@ -67,7 +72,7 @@ executable function-graph
     import:           warnings
     main-is:          Main.hs
     hs-source-dirs:   app
-    build-depends:    base, function-graph
+    build-depends:    base, function-graph, bellman-ford, containers, ansi-terminal
     default-language: Haskell2010
 
 executable benchmark
@@ -93,7 +98,9 @@ test-suite function-graph-test
   build-depends:
       base
     , function-graph
+    , bellman-ford
     , bytestring
+    , text
     , containers
     , hspec
     , hspec-expectations

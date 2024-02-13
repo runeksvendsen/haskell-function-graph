@@ -5,5 +5,10 @@ pkgs.mkShell {
     release-21-05.cabal-install
     pkgs.zlib
     pkgs.git
+    pkgs.graphviz
   ];
+
+  shellHook = ''
+    export PATH=./hls:$PATH
+  '';
 }

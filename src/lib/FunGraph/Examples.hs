@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module MyLib.Examples where
+module FunGraph.Examples where
 
-import MyLib
+import FunGraph
 
 all :: [(FullyQualifiedType, String)]
 all =

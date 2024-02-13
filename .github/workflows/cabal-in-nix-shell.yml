@@ -48,6 +48,12 @@ jobs:
       - name: Run 'function-graph-test' test suite
         run: nix-shell --run "cabal test test-suite:function-graph-test --test-show-details=direct"
 
+      - name: Build benchmark
+        run: nix-shell --run "cabal build exe:benchmark"
+
+      - name: Run benchmark
+        run: nix-shell --run "cabal run exe:benchmark"
+
       - name: Build 'function-graph' executable
         run: nix-shell --run "cabal build exe:function-graph"
 
