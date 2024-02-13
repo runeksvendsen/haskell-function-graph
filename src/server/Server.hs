@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Server (main) where
 
@@ -9,6 +9,7 @@ import Network.Wai.Handler.Warp (run)
 import Server.Api
 import qualified FunGraph
 import Lucid
+import qualified Data.Text as T
 
 main :: Html () -> Int -> FilePath -> IO ()
 main appendToHead port graphDataFilename =
@@ -23,5 +24,12 @@ app appendToHead graph =
     myApi :: Proxy Root
     myApi = Proxy
 
+    customCss = style_ $ T.unlines
+      [ -- fix SVG width
+        "max-width: 100%;"
+      -- , "height: auto;"
+      , "display: block;"
+      ]
+
     server =
-      Server.Pages.Root.handler appendToHead graph
+      Server.Pages.Root.handler (customCss <> appendToHead) graph
