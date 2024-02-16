@@ -26,7 +26,7 @@ handler appendToHead graph mSrc mDst mLimit =
   where
     page' = page appendToHead
 
-    defaultLimit = 20
+    defaultLimit = 20 -- TODO: add as input field
 
 page :: Html () -> Html ()
 page appendToHead = doctypehtml_ $ do

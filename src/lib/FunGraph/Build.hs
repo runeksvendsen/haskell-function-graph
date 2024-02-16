@@ -129,6 +129,7 @@ defaultBuildConfig = BuildConfig
 emptyBuildConfig :: BuildConfig
 emptyBuildConfig = mempty
 
+-- TODO: add "exclude loops"
 data BuildConfig = BuildConfig
   { buildConfig_excludePackages :: Set.Set BSC8.ByteString
   -- ^ Set of package names (without version postfix)
