@@ -20,6 +20,7 @@ library
                       FunGraph.Examples
                       FunGraph.Test
                       FunGraph.Util
+                      FunGraph.GraphViz
     build-depends:    base
                     , hashable
                     , bellman-ford
@@ -33,6 +34,8 @@ library
                     , stringsearch
                     , deepseq
                     , graphviz
+                    -- FunGraph.Util
+                    , lucid
     hs-source-dirs:   src/lib
     default-language: Haskell2010
 

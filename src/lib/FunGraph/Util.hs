@@ -31,6 +31,9 @@ import qualified Data.GraphViz.Types.Generalised
 import qualified Data.GraphViz.Commands
 import qualified Data.Text.IO as TIO
 import qualified Data.Text as T
+import qualified Lucid
+import Debug.Trace (traceM)
+import qualified Data.Map.Strict as Map
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -69,17 +72,51 @@ graphToDot
   -> ST s LT.Text
 graphToDot name =
   let bsToLT = LT.fromStrict . TE.decodeUtf8
+      -- use 'lucid' to escape what needs escaping
+      htmlString html = DG.DotString_Raw $ "< " <> Lucid.renderText html <> " >"
+      vertexAttributes txt = Map.fromList
+        [ ( "label"
+          ,  htmlString (Lucid.b_ $ Lucid.toHtml txt)
+          )
+        , ( "shape"
+            -- Make size of node totally determined by the label.
+          , DG.DotString_Raw "plain"
+          )
+        ]
+
+      edgeAttributes fn = Map.fromList
+        [ ( "label"
+          ,  htmlString $ do
+              Lucid.span_ "Name: "
+              Lucid.b_ $ Lucid.toHtml (_function_name fn)
+              Lucid.br_ []
+              Lucid.span_ "Module: "
+              Lucid.b_ $ Lucid.toHtml (_function_module fn)
+              Lucid.br_ []
+              Lucid.span_ "Package: "
+              Lucid.b_ $ Lucid.toHtml (_function_package fn)
+          )
+        , ( "tooltip"
+          , DG.DotString_DoubleQuoted $ LT.pack $ show $ PrettyTypedFunction fn
+          )
+        ]
+
   in DG.graphToDotMulti
-    (bsToLT . unFullyQualifiedType)
-    (bsToLT . _function_name . DG.eMeta)
-    (bsToLT name)
+    (vertexAttributes . bsToLT . unFullyQualifiedType)
+    (edgeAttributes . DG.eMeta)
+    (DG.DotString_DoubleQuoted $ bsToLT name)
+
+-- TODO: execute graphviz manually (streaming-process?). read SVG from stdout. read stderr and print on error exit code.
+--          /nix/store/56gcjzxqvh9729l8ia5r7zbbd5l0bvgw-graphviz-7.1.0/bin/dot -v -Tsvg -Kdot test.dot
 
 graphToDotGraphviz
   :: BSC8.ByteString
   -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
   -> ST s (Data.GraphViz.Types.Generalised.DotGraph LT.Text)
-graphToDotGraphviz name =
-  fmap Data.GraphViz.Types.parseDotGraph . graphToDot name
+graphToDotGraphviz name g = do
+  blah <- graphToDot name g
+  traceM $ LT.unpack blah
+  pure $ Data.GraphViz.Types.parseDotGraph blah
 
 graphVizRender
   :: Data.GraphViz.Commands.GraphvizCommand -- ^ Layout
