@@ -1,4 +1,4 @@
-dist-newstyle/
+dist-newstyle*
 *.hp
 *.prof*
 cabal.project.local*
