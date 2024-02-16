@@ -16,6 +16,7 @@ import Data.List (intersperse)
 import qualified Data.Text.Encoding as TE
 import Data.Containers.ListUtils (nubOrd)
 import qualified FunGraph.Util as Util
+import qualified Server.GraphViz
 import qualified Control.Monad.ST as ST
 import Control.Monad.IO.Class (liftIO)
 
@@ -51,11 +52,11 @@ page graph src dst maxCount = do
 
     renderResultGraphIO =
       ST.stToIO resultDotGraph
-        >>= Util.graphVizRender Util.Dot Util.Svg
+        >>= Server.GraphViz.renderDotGraph
 
     resultDotGraph =
       Util.graphFromQueryResult query
-        >>= Util.graphToDotGraphviz ""
+        >>= Util.graphToDot ""
 
     query =
       FunGraph.runQueryTree

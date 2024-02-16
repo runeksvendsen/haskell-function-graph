@@ -7,11 +7,6 @@ module FunGraph.Util
   , showTypeSig
   , graphFromQueryResult
   , graphToDot
-  , graphToDotGraphviz
-  , graphVizRender
-  -- * Re-exports
-  , Data.GraphViz.Commands.GraphvizCommand(..)
-  , Data.GraphViz.Commands.GraphvizOutput(..)
   )
   where
 
@@ -26,14 +21,9 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as LT
 import Control.Monad.ST (ST)
 import qualified Data.Set as Set
-import qualified Data.GraphViz.Types
-import qualified Data.GraphViz.Types.Generalised
-import qualified Data.GraphViz.Commands
-import qualified Data.Text.IO as TIO
-import qualified Data.Text as T
 import qualified Lucid
-import Debug.Trace (traceM)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -74,6 +64,7 @@ graphToDot name =
   let bsToLT = LT.fromStrict . TE.decodeUtf8
       -- use 'lucid' to escape what needs escaping
       htmlString html = DG.DotString_Raw $ "< " <> Lucid.renderText html <> " >"
+      plainText txt = Lucid.toHtml (txt :: T.Text)
       vertexAttributes txt = Map.fromList
         [ ( "label"
           ,  htmlString (Lucid.b_ $ Lucid.toHtml txt)
@@ -87,13 +78,13 @@ graphToDot name =
       edgeAttributes fn = Map.fromList
         [ ( "label"
           ,  htmlString $ do
-              Lucid.span_ "Name: "
+              plainText "Name: "
               Lucid.b_ $ Lucid.toHtml (_function_name fn)
-              Lucid.br_ []
-              Lucid.span_ "Module: "
+              -- Lucid.br_ []
+              plainText "Module: "
               Lucid.b_ $ Lucid.toHtml (_function_module fn)
-              Lucid.br_ []
-              Lucid.span_ "Package: "
+              -- Lucid.br_ []
+              plainText "Package: "
               Lucid.b_ $ Lucid.toHtml (_function_package fn)
           )
         , ( "tooltip"
@@ -105,32 +96,6 @@ graphToDot name =
     (vertexAttributes . bsToLT . unFullyQualifiedType)
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
-
--- TODO: execute graphviz manually (streaming-process?). read SVG from stdout. read stderr and print on error exit code.
---          /nix/store/56gcjzxqvh9729l8ia5r7zbbd5l0bvgw-graphviz-7.1.0/bin/dot -v -Tsvg -Kdot test.dot
-
-graphToDotGraphviz
-  :: BSC8.ByteString
-  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> ST s (Data.GraphViz.Types.Generalised.DotGraph LT.Text)
-graphToDotGraphviz name g = do
-  blah <- graphToDot name g
-  traceM $ LT.unpack blah
-  pure $ Data.GraphViz.Types.parseDotGraph blah
-
-graphVizRender
-  :: Data.GraphViz.Commands.GraphvizCommand -- ^ Layout
-  -> Data.GraphViz.Commands.GraphvizOutput -- ^ Output format
-  -> Data.GraphViz.Types.Generalised.DotGraph LT.Text -- ^ Actual graph
-  -> IO T.Text
-graphVizRender graphvizCommand graphvizOutput g =
-  Data.GraphViz.Commands.graphvizWithHandle
-    graphvizCommand
-    g
-    graphvizOutput
-    extractFromHandle
-  where
-    extractFromHandle = TIO.hGetContents
 
 -- | Build a graph from the output of 'FunGraph.runQueryTreeST'
 graphFromQueryResult

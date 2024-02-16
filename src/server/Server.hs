@@ -10,9 +10,11 @@ import Server.Api
 import qualified FunGraph
 import Lucid
 import qualified Data.Text as T
+import qualified Server.GraphViz
 
 main :: Html () -> Int -> FilePath -> IO ()
-main appendToHead port graphDataFilename =
+main appendToHead port graphDataFilename = do
+  Server.GraphViz.healthCheck
   FunGraph.withFrozenGraphFromFile FunGraph.defaultBuildConfig graphDataFilename $ \graph ->
     run port $
       app appendToHead graph
@@ -27,7 +29,7 @@ app appendToHead graph =
     fixSvgWidth = style_ $ T.unlines
       [ "svg {"
       , "  max-width: 100%;"
-      , "  height: auto;"
+      , "  height: 400%;"
       , "  display: block;"
       , "}"
       ]
