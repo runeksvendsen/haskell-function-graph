@@ -23,7 +23,6 @@ import Control.Monad.ST (ST)
 import qualified Data.Set as Set
 import qualified Lucid
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -64,30 +63,20 @@ graphToDot name =
   let bsToLT = LT.fromStrict . TE.decodeUtf8
       -- use 'lucid' to escape what needs escaping
       htmlString html = DG.DotString_Raw $ "< " <> Lucid.renderText html <> " >"
-      plainText txt = Lucid.toHtml (txt :: T.Text)
       vertexAttributes txt = Map.fromList
         [ ( "label"
           ,  htmlString (Lucid.b_ $ Lucid.toHtml txt)
           )
-        , ( "shape"
-            -- Make size of node totally determined by the label.
-          , DG.DotString_Raw "plain"
+        , ( "tooltip"
+          , DG.DotString_DoubleQuoted txt
           )
         ]
 
       edgeAttributes fn = Map.fromList
         [ ( "label"
-          ,  htmlString $ do
-              plainText "Name: "
-              Lucid.b_ $ Lucid.toHtml (_function_name fn)
-              -- Lucid.br_ []
-              plainText "Module: "
-              Lucid.b_ $ Lucid.toHtml (_function_module fn)
-              -- Lucid.br_ []
-              plainText "Package: "
-              Lucid.b_ $ Lucid.toHtml (_function_package fn)
+          , DG.DotString_DoubleQuoted $ LT.fromStrict . TE.decodeUtf8 $ _function_name fn
           )
-        , ( "tooltip"
+        , ( "labeltooltip"
           , DG.DotString_DoubleQuoted $ LT.pack $ show $ PrettyTypedFunction fn
           )
         ]
