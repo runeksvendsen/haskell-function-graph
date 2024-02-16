@@ -7,13 +7,11 @@ where
 import qualified System.Process as Proc
 import qualified Data.Text.Lazy as LT
 import qualified Data.ByteString as BS
-import Control.Monad (when)
 import System.Exit (ExitCode(ExitSuccess))
 import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy.Char8
 import qualified Data.Text.Lazy.Encoding
 import qualified Data.ByteString.Char8
-import Data.Functor (void)
 
 dotExe :: FilePath
 dotExe = "dot"
@@ -48,12 +46,14 @@ healthCheck =
 
 renderDotGraph
   :: LT.Text
-  -> IO BS.ByteString
+  -> IO (Either String BS.ByteString)
 renderDotGraph dot = do
-  Right (_, stdout, _) <- runDotExe
+  eRes <- runDotExe
     [ "-v" -- verbose
     , "-Tsvg" -- output format: SVG
     , "-Kdot" -- layout engine: dot
     ]
     (Data.ByteString.Lazy.Char8.unpack . Data.Text.Lazy.Encoding.encodeUtf8 $ dot)
-  pure $ Data.ByteString.Char8.pack stdout
+  pure $ do
+    (_, stdout, _) <- eRes
+    pure $ Data.ByteString.Char8.pack stdout

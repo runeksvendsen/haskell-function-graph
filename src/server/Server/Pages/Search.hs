@@ -22,7 +22,7 @@ import Control.Monad.IO.Class (liftIO)
 
 page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
 page graph src dst maxCount = do
-  resultGraph <- liftIO renderResultGraphIO
+  resultGraphE <- liftIO renderResultGraphIO
   pure $ do
     p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
     table_ $ do
@@ -41,7 +41,10 @@ page graph src dst maxCount = do
                     nubOrd $
                       map FunGraph.functionPackageNoVersion result
     h2_ "Result graph"
-    toHtmlRaw resultGraph -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+    either
+      (const $ plain "Failed to render result graph")
+      toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+      resultGraphE
   where
     srcDst =
       (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
@@ -83,3 +86,6 @@ page graph src dst maxCount = do
             , "background-color: rgb(200, 200, 200)"
             ]
       in span_ [style]
+
+plain :: Monad m => T.Text -> HtmlT m ()
+plain = toHtml
