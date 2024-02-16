@@ -41,7 +41,8 @@ runDotExe args stdin = do
 --
 --   Run when starting server to exit early in case of missing runtime dependencies.
 healthCheck :: IO ()
-healthCheck =
+healthCheck = do
+  putStrLn $ "Checking if 'dot' executable can be executed..."
   runDotExe ["-V"] "" >>= either (Ex.throwIO . Ex.ErrorCall) (const $ pure ())
 
 renderDotGraph
