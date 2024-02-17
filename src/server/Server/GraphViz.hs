@@ -7,11 +7,12 @@ where
 import qualified System.Process as Proc
 import qualified Data.Text.Lazy as LT
 import qualified Data.ByteString as BS
-import System.Exit (ExitCode(ExitSuccess))
+import qualified System.Exit as Exit
 import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy.Char8
 import qualified Data.Text.Lazy.Encoding
 import qualified Data.ByteString.Char8
+import Data.Bifunctor (first)
 
 dotExe :: FilePath
 dotExe = "dot"
@@ -19,31 +20,41 @@ dotExe = "dot"
 runDotExe
   :: [String] -- ^ arguments
   -> String -- ^ stdin
-  -> IO (Either String (ExitCode, String, String)) -- ^ exitcode, stdout, stderr
+  -> IO (Either String (Exit.ExitCode, String, String)) -- ^ exitcode, stdout, stderr
 runDotExe args stdin = do
-  res@(exitCode, stdout, stderr) <- Proc.readProcessWithExitCode dotExe args stdin
-  case exitCode of
-    ExitSuccess -> pure $ Right res
-    _ -> pure $ Left $ unwords
-      [ "Executing"
-      , "'" <> dotExe <> "'"
-      , "with arguments"
-      , "'" <> unwords args <> "'"
-      , "failed with"
-      , show exitCode <> "."
-      , "Stdout:"
-      , stdout <> "."
-      , "Stderr:"
-      , stderr <> "."
-      ]
+  eRes <- Ex.try $ Proc.readProcessWithExitCode dotExe args stdin
+  pure $ do
+    res@(exitCode, stdout, stderr) <- first showException eRes
+    case exitCode of
+      Exit.ExitSuccess -> Right res
+      _ -> Left $ unwords
+        [ "Executing"
+        , "'" <> dotExe <> "'"
+        , "with arguments"
+        , "'" <> unwords args <> "'"
+        , "failed with"
+        , show exitCode <> "."
+        , "Stdout:"
+        , stdout <> "."
+        , "Stderr:"
+        , stderr <> "."
+        ]
+  where
+    showException :: IOError -> String
+    showException = show
 
 -- | Throw an exception in case of missing runtime dependencies.
 --
 --   Run when starting server to exit early in case of missing runtime dependencies.
 healthCheck :: IO ()
 healthCheck = do
-  putStrLn $ "Checking if 'dot' executable can be executed..."
-  runDotExe ["-V"] "" >>= either (Ex.throwIO . Ex.ErrorCall) (const $ pure ())
+  putStr $ "Checking if 'dot' executable can be executed... "
+  runDotExe ["-V"] "" >>= either handleError (const $ pure ())
+  putStrLn $ "success"
+  where
+    handleError errStr = do
+      putStrLn "FAIL (is the executable 'dot' on the PATH?)"
+      Exit.die errStr
 
 renderDotGraph
   :: LT.Text
