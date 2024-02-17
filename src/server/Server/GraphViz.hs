@@ -48,12 +48,12 @@ runDotExe args stdin = do
 --   Run when starting server to exit early in case of missing runtime dependencies.
 healthCheck :: IO ()
 healthCheck = do
-  putStr $ "Checking if 'dot' executable can be executed... "
+  putStr $ "Checking if '" <> dotExe <> "' executable can be executed... "
   runDotExe ["-V"] "" >>= either handleError (const $ pure ())
   putStrLn $ "success"
   where
     handleError errStr = do
-      putStrLn "FAIL (is the executable 'dot' on the PATH?)"
+      putStrLn $ "FAIL. Is the executable '" <> dotExe <> "' on the PATH?"
       Exit.die errStr
 
 renderDotGraph
