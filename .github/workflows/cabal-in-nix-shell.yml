@@ -6,7 +6,7 @@ on:
 
 jobs:
   build_init:
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -34,12 +34,14 @@ jobs:
         run: nix-shell --run "echo 'it works \o/'"
 
   run_todo-sh:
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     needs: build_init
     steps:
       - name: Run TODO.sh
         run: nix-shell --run "./TODO.sh"
 
   build_lib:
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     needs: build_init
     steps:
       - name: Run 'cabal update'
@@ -52,6 +54,7 @@ jobs:
         run: nix-shell --run "cabal build lib:function-graph-server"
 
   build_run_tests:
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     needs: build_lib
     steps:
       - name: Build 'function-graph-test' test suite
@@ -61,6 +64,7 @@ jobs:
         run: nix-shell --run "cabal test test-suite:function-graph-test --test-show-details=direct"
 
   build_run_benchmark:
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     needs: build_lib
     steps:
       - name: Build benchmark
@@ -70,12 +74,14 @@ jobs:
         run: nix-shell --run "cabal run exe:benchmark"
 
   build_function-graph_exe:
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     needs: build_lib
     steps:
       - name: Build 'function-graph' executable
         run: nix-shell --run "cabal build exe:function-graph"
 
   build_server_exe:
+    runs-on: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
     needs: build_lib
     steps:
       - name: Build 'server' executable
