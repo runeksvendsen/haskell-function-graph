@@ -6,6 +6,7 @@ pkgs.mkShell {
     pkgs.zlib
     pkgs.git
     pkgs.graphviz
+    pkgs.gnused # TODO.sh depends on GNU grep
   ];
 
   shellHook = ''

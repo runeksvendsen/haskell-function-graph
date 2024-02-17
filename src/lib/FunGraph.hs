@@ -4,6 +4,9 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
+-- | Query the function graph.
+--
+--   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
 module FunGraph
   ( -- * Queries
     runQueryAll, runQueryTree, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
