@@ -9,6 +9,6 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
-    export PATH=./hls:$PATH # Run the command '$(nix-build build-hls.sh.nix)/bin/build-hls.sh' to install HLS in this directory
+    export PATH="$(pwd)/hls":$PATH # Run the command '$(nix-build build-hls.sh.nix)/bin/build-hls.sh' to install HLS in this directory
   '';
 }
