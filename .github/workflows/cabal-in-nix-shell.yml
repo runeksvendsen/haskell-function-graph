@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  build_test_nix_shell:
+  build_init:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,6 +33,15 @@ jobs:
       - name: Test nix-shell
         run: nix-shell --run "echo 'it works \o/'"
 
+  run_todo-sh:
+    needs: build_init
+    steps:
+      - name: Run TODO.sh
+        run: nix-shell --run "./TODO.sh"
+
+  build_lib:
+    needs: build_init
+    steps:
       - name: Run 'cabal update'
         run: nix-shell --run "cabal update"
 
@@ -42,23 +51,32 @@ jobs:
       - name: Build 'function-graph-server' library
         run: nix-shell --run "cabal build lib:function-graph-server"
 
+  build_run_tests:
+    needs: build_lib
+    steps:
       - name: Build 'function-graph-test' test suite
         run: nix-shell --run "cabal build test-suite:function-graph-test"
 
       - name: Run 'function-graph-test' test suite
         run: nix-shell --run "cabal test test-suite:function-graph-test --test-show-details=direct"
 
+  build_run_benchmark:
+    needs: build_lib
+    steps:
       - name: Build benchmark
         run: nix-shell --run "cabal build exe:benchmark"
 
       - name: Run benchmark
         run: nix-shell --run "cabal run exe:benchmark"
 
+  build_function-graph_exe:
+    needs: build_lib
+    steps:
       - name: Build 'function-graph' executable
         run: nix-shell --run "cabal build exe:function-graph"
 
+  build_server_exe:
+    needs: build_lib
+    steps:
       - name: Build 'server' executable
         run: nix-shell --run "cabal build exe:server"
-
-      - name: Run TODO.sh
-        run: nix-shell --run "./TODO.sh"
