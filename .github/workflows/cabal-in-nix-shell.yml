@@ -33,6 +33,12 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('**/*.cabal', '**/cabal.project', '**/cabal.project.freeze') }}
           restore-keys: ${{ runner.os }}-
 
+      # Fixes error:
+      #   Detected Bash version that isn't supported by Nixpkgs (3.2.57(1)-release)
+      #   Please install Bash 4 or greater to continue.
+      - name: Install Bash
+        run: nix-env -f "https://github.com/NixOS/nixpkgs/archive/release-23.11.tar.gz" -iA bash
+
       - name: Test nix-shell
         run: nix-shell --run "echo 'it works \o/'"
 
