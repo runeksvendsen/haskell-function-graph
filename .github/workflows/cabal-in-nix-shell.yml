@@ -8,7 +8,7 @@ jobs:
   build_init:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -39,7 +39,7 @@ jobs:
   run_todo-sh:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     needs: build_init
     steps:
@@ -49,7 +49,7 @@ jobs:
   build_lib:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     needs: build_init
     steps:
@@ -65,7 +65,7 @@ jobs:
   build_run_tests:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     needs: build_lib
     steps:
@@ -78,7 +78,7 @@ jobs:
   build_run_benchmark:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     needs: build_lib
     steps:
@@ -91,7 +91,7 @@ jobs:
   build_function-graph_exe:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     needs: build_lib
     steps:
@@ -101,7 +101,7 @@ jobs:
   build_server_exe:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-14, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
     runs-on: ${{ matrix.os }}
     needs: build_lib
     steps:
