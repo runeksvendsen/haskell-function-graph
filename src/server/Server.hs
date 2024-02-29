@@ -5,6 +5,7 @@
 module Server (main) where
 
 import qualified Server.Pages.Root
+import qualified Server.Pages.Search
 import Servant
 import Network.Wai.Handler.Warp (run)
 import Server.Api
@@ -26,7 +27,7 @@ app :: Html () -> FunGraph.FrozenGraph -> Application
 app appendToHead graph =
   enableMiddleware $ serve myApi server
   where
-    myApi :: Proxy Root
+    myApi :: Proxy Api
     myApi = Proxy
 
     fixSvgWidth = style_ $ T.unlines
@@ -37,8 +38,18 @@ app appendToHead graph =
       , "}"
       ]
 
+    -- TODO: inline
+    htmx = toHtmlRaw $ T.unlines
+      [ "<script"
+      , "  src=\"https://unpkg.com/htmx.org@1.9.4\""
+      , "  integrity=\"sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV\""
+      , "  crossorigin=\"anonymous\""
+      , "></script>"
+      ]
+
     server =
-      Server.Pages.Root.handler (fixSvgWidth <> appendToHead) graph
+      pure (Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead)) :<|>
+      Server.Pages.Search.handler graph
 
     enableMiddleware =
         RL.logStdoutDev

@@ -4,13 +4,14 @@
 
 module Server.Pages.Search
 ( page
+, handler
 )
 where
 
 import Lucid
 import Control.Monad (forM_)
 import qualified Data.Text as T
-import Servant.Server (Handler)
+import Servant.Server
 import qualified FunGraph
 import Data.List (intersperse)
 import qualified Data.Text.Encoding as TE
@@ -19,6 +20,15 @@ import qualified FunGraph.Util as Util
 import qualified Server.GraphViz
 import qualified Control.Monad.ST as ST
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Except (throwError)
+import Data.Maybe (fromMaybe)
+
+handler :: FunGraph.FrozenGraph -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
+handler graph (Just src) (Just dst) mMaxCount =
+  let defaultLimit = 100 -- TODO: add as HTML input field
+  in page graph src dst (fromMaybe defaultLimit mMaxCount)
+handler _ _ _ _ =
+  throwError $ err400 { errBody = "Your request makes no sense to me." }
 
 page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
 page graph src dst maxCount = do

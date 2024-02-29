@@ -8,8 +8,13 @@ import Servant.HTML.Lucid
 import Lucid (Html)
 import qualified Data.Text as T
 
+type Api = Root :<|> Search
+
 type Root
-  =  "root"
+  =  Get '[HTML] (Html ())
+
+type Search
+  =  "search"
   :> QueryParam "src" T.Text
   :> QueryParam "dst" T.Text
   :> QueryParam "limit" Word
