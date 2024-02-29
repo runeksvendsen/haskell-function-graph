@@ -156,7 +156,7 @@ runQueryTreeST
   -> ST s [([NE.NonEmpty TypedFunction], Double)]
 runQueryTreeST runner maxCount (src, dst) = do
   res <- runner weightCombine initialWeight $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 2 (src, dst) -- TODO: factor out "level" arg
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
   pure $ map (first (map (removeNonMin . DG.eMeta))) res
   where
     -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
