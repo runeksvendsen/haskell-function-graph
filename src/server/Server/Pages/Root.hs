@@ -31,12 +31,31 @@ form targetId = do
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
   form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId)] $ do
     label_ [for_ "src"] "FROM type: "
-    input_ [name_ "src", id_ "src", list_ "type_suggestions", placeholder_ "FROM type"]
-    suggestions "type_suggestions"
+    script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
+    input_ -- WIP: factor into widget
+      [ name_ "src"
+      , id_ "src"
+      , list_ typeSuggestions
+      , placeholder_ "FROM type"
+      , hxGet_ "/typeahead" -- TODO: use something type-safe
+      , hxTarget_ $ "#" <> typeSuggestions
+      , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
+      ]
+    suggestions typeSuggestions
     label_ [for_ "dst"] "TO type: "
-    input_ [name_ "dst", id_ "dst", list_ "type_suggestions", placeholder_ "TO type"]
-    suggestions "type_suggestions"
+    input_
+      [ name_ "dst"
+      , id_ "dst"
+      , list_ typeSuggestions
+      , placeholder_ "TO type"
+      , hxGet_ "/typeahead" -- TODO: use something type-safe
+      , hxTarget_ $ "#" <> typeSuggestions
+      , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
+      ]
+    suggestions typeSuggestions
     button_ [] "Search"
+    where
+      typeSuggestions = "type_suggestions"
 
 suggestions :: T.Text -> Html ()
 suggestions id' = do
