@@ -46,6 +46,7 @@ library function-graph-server
                       Server.Pages.Search
                       Server.Pages.Typeahead
                       Server.GraphViz
+                      Data.PrioTrie
     build-depends:    base
                     , function-graph
                     , text
@@ -64,6 +65,7 @@ library function-graph-server
                     -- END: Server.GraphViz
                     , servant-errors
                     , wai-extra
+                    , deepseq
     hs-source-dirs:   src/server
     default-language: Haskell2010
 
