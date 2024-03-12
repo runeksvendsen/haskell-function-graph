@@ -48,6 +48,7 @@ library function-graph-server
                       Server.GraphViz
                       Data.PrioTrie
     build-depends:    base
+                    , bellman-ford
                     , function-graph
                     , text
                     , bytestring

@@ -46,7 +46,7 @@ blah = undefined
 
 unitTest :: (PrioTrie Integer String, PrioTrie Integer String)
 unitTest =
-  (fromList inputList, trie)
+  (fromList id inputList, trie)
   where
     inputList = NE.fromList
       [ ("a", (2, "2"))
@@ -90,9 +90,12 @@ unitTest =
 fromList
   :: forall prio a.
      Ord prio
-  => NE.NonEmpty (BS.ByteString, (prio, a))
+  => (NE.NonEmpty (prio, a) -> NE.NonEmpty (prio, a))
+     -- ^ Modify the sorted list stored at each 'PrioTrie_Node'.
+     -- Used to e.g. limit the number of items in the list.
+  -> NE.NonEmpty (BS.ByteString, (prio, a))
   -> PrioTrie prio a
-fromList lst =
+fromList modify lst =
   let
       initMap :: Map.Map BS.ByteString (NE.NonEmpty (prio, a)) -- unsorted!
       -- ByteString -> [(144, Data.Internal.ByteString), (37, Data.Internal.Lazy.ByteString)]
@@ -126,7 +129,7 @@ fromList lst =
       mkIntMap =
         IMap.fromList
           . Map.toList
-          . Map.map fromList
+          . Map.map (fromList modify)
           . Map.map (NE.fromList . concatMap (\(bs, ne) -> map (bs,) (NE.toList ne)) . NE.toList)
           . Map.mapKeys fromIntegral
 
@@ -135,7 +138,7 @@ fromList lst =
         mkIntMap $ mkPrefixToList $ mkUnconsMap initMap
 
       -- the non-empty input list sorted by priority (descending)
-      nonEmpty =
+      nonEmpty = modify $
         NE.fromList . sortOn (Down . fst) $ map snd (NE.toList lst)
 
   in PrioTrie_Node intMap nonEmpty

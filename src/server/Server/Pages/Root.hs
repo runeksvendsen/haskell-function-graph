@@ -13,52 +13,57 @@ import qualified FunGraph.Examples as Examples
 import qualified FunGraph
 import Control.Monad (forM_)
 
-page :: Html () -> Html ()
-page appendToHead = doctypehtml_ $ do
+page
+  :: Html () -- ^ Append to 'head' element
+  -> Html () -- ^ Initial typeahead suggestions (sequence of 'option' elements)
+  -> Html ()
+page appendToHead initialSuggestions = doctypehtml_ $ do
   head_ $ do
     title_ "Haskell Function Graph"
     appendToHead
   body_ $ do
     div_ [id_ "header"] "Search for compositions of functions"
     let targetId = "search_result"
-    form targetId
+    form targetId initialSuggestions
     h3_ "Results"
     div_ [id_ targetId] ""
 
-form :: T.Text -> Html ()
-form targetId = do
+form :: T.Text -> Html () -> Html ()
+form targetId initialSuggestions = do
   h3_ "Search"
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
   form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId)] $ do
+    (srcInput, dstInput) <- mkTypeaheadInputs initialSuggestions
     label_ [for_ "src"] "FROM type: "
-    script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
-    input_ -- WIP: factor into widget
-      [ name_ "src"
-      , id_ "src"
-      , list_ typeSuggestions
-      , placeholder_ "FROM type"
-      , hxGet_ "/typeahead" -- TODO: use something type-safe
-      , hxTarget_ $ "#" <> typeSuggestions
-      , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
-      ]
-    suggestions typeSuggestions
+    srcInput
     label_ [for_ "dst"] "TO type: "
-    input_
-      [ name_ "dst"
-      , id_ "dst"
-      , list_ typeSuggestions
-      , placeholder_ "TO type"
-      , hxGet_ "/typeahead" -- TODO: use something type-safe
-      , hxTarget_ $ "#" <> typeSuggestions
-      , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
-      ]
-    suggestions typeSuggestions
+    dstInput
     button_ [] "Search"
-    where
-      typeSuggestions = "type_suggestions"
 
-suggestions :: T.Text -> Html ()
-suggestions id' = do
-  datalist_ [id_ id'] $ do
-    forM_ Examples.all $ \example ->
-       option_ [value_ $ FunGraph.fullyQualifiedTypeToText (fst example)] ""
+mkTypeaheadInputs
+  :: Html ()
+  -> Html (Html (), Html ())
+mkTypeaheadInputs initialSuggestions = do
+  script_ "function checkUserKeydown(event) { console.log(event); return event instanceof KeyboardEvent }"
+  pure
+    ( mkInput "src" [placeholder_ "FROM type"]
+    , mkInput "dst" [placeholder_ "TO type"]
+    )
+  where
+    typeSuggestionsBaseId = "type_suggestions"
+
+    mkInput id' attrs = do
+      let typeSuggestionsId = typeSuggestionsBaseId <> "_" <> id'
+      mkSuggestions typeSuggestionsId initialSuggestions
+      input_ $ attrs ++
+        [ name_ id'
+        , id_ id'
+        , list_ typeSuggestionsId
+        , hxGet_ "/typeahead" -- TODO: use something type-safe
+        , hxTarget_ $ "#" <> typeSuggestionsId
+        , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
+        ]
+
+mkSuggestions :: T.Text -> Html () -> Html ()
+mkSuggestions id' =
+  datalist_ [id_ id']

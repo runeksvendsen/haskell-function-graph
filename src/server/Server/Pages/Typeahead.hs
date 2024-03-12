@@ -1,29 +1,83 @@
 {-# LANGUAGE OverloadedStrings #-}
-
 module Server.Pages.Typeahead
-( handler
+( mkHandler
 )
 where
 
+import qualified Data.PrioTrie
 import Lucid
-import Control.Monad (forM_)
+import Control.Monad (forM_, forM)
 import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
+import Control.Monad.ST (stToIO)
+import qualified Data.Graph.Digraph as DG
+import qualified Data.Map.Strict as Map
+import Data.Tuple (swap)
+import qualified Data.List.NonEmpty as NE
+import qualified Data.ByteString as BS
+import Data.Functor ((<&>))
+import Control.Monad.Except (throwError)
+import qualified Data.Text.Encoding as TE
+import qualified Control.Exception as Ex
+import qualified Control.DeepSeq
+import qualified Control.Monad.ST as ST
+
+mkHandler
+  :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
+  -> FunGraph.FrozenGraph
+  -> IO ( Maybe T.Text -> Maybe T.Text -> Handler (Html ())
+        , Html ()
+        ) -- ^ (handler, initial suggestions)
+mkHandler mLimit igraph = do
+  mPrioTrie <- stToIO (DG.thaw igraph) >>= mkPrioTrie mLimit
+  prioTrie <- maybe (fail "empty input graph in Typeahead handler") pure mPrioTrie
+  let initialSuggestions = suggestions prioTrie ""
+  pure (handler prioTrie, initialSuggestions)
+
+mkPrioTrie
+  :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
+  -> FunGraph.Graph ST.RealWorld
+  -> IO (Maybe (Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType))
+     -- ^ 'Nothing' if the input graph is empty
+mkPrioTrie mLimit graph = do
+  countList <- stToIO $ do
+    (outMap, inMap) <- DG.outgoingIncomingCount graph
+    let countMap = Map.unionWith (+) outMap inMap
+    mapM (traverse (lookupVertexId graph) . swap) (Map.toList countMap)
+  let mTypeaheadData :: Maybe (NE.NonEmpty (BS.ByteString, (Word, FunGraph.FullyQualifiedType)))
+      mTypeaheadData = NE.nonEmpty $ countList <&> \(count, fqt) ->
+        (FunGraph.unFullyQualifiedType fqt, (count, fqt))
+  forM mTypeaheadData $ \typeaheadData ->
+  -- typeaheadData <- maybe (fail "Empty graph in Typeahead handler") pure mTypeaheadData
+    Ex.evaluate $ Control.DeepSeq.force $
+      -- I believe deeply evaluating the PrioTrie is necessary because its very purpose is pre-computing stuff, ie. _not_ postponing evaluation until its result is demanded. For example, the sorted lists inside the PrioTrie must not be thunks, because that would mean we postpone sorting until a request demands it (which introduces unwanted latency for the first request that forces evaluation of a particular sorted list).
+      Data.PrioTrie.fromList limit typeaheadData
+  where
+    lookupVertexId g vid = do
+      DG.lookupVertexId g vid >>=
+        maybe (fail $ "BUG: VertexId not found: " <> show vid) pure
+
+    limit = maybe id (\l -> NE.fromList . NE.take (fromIntegral l)) mLimit
 
 handler
-  :: FunGraph.FrozenGraph
+  :: Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType
   -> Maybe T.Text
   -> Maybe T.Text
   -> Handler (Html ())
-handler graph mSrc mDst = pure $
+handler prioTrie mSrc mDst =
   case (mSrc, mDst) of
-    (Just src, Nothing) -> suggestions src
-    (Nothing, Just dst) -> suggestions dst
-    (_, _) -> error "TODO"
+    (Just src, Nothing) -> pure $ suggestions prioTrie src
+    (Nothing, Just dst) -> pure $ suggestions prioTrie dst
+    (_, _) -> throwError $ err400 { errBody = "Missing 'src' or 'dst' query param" }
 
-suggestions :: T.Text -> Html ()
-suggestions prefix = do
-  datalist_ [id_ "type_suggestions"] $ -- TODO: don't hardcode "id" from Server.Pages.Root.suggestions
-    forM_ (map (T.pack . (: [])) ['a'..'z']) $ \postfix ->
-      option_ [value_ $ prefix <> postfix] ""
+suggestions
+  :: Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType
+  -> T.Text
+  -> Html ()
+suggestions prioTrie prefix = do
+  forM_ mSuggestions $ \suggestionsLst ->
+    forM_ suggestionsLst $ \(_, fqt) ->
+      option_ [value_ $ TE.decodeUtf8 $ FunGraph.unFullyQualifiedType fqt] ""
+  where
+    mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
