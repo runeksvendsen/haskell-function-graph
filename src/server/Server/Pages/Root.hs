@@ -9,9 +9,6 @@ where
 import Lucid
 import Lucid.Htmx
 import qualified Data.Text as T
-import qualified FunGraph.Examples as Examples
-import qualified FunGraph
-import Control.Monad (forM_)
 
 page
   :: Html () -- ^ Append to 'head' element

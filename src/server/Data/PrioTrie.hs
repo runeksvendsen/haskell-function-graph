@@ -33,17 +33,6 @@ data PrioTrie prio a
 
 instance (NFData prio, NFData a) => NFData (PrioTrie prio a)
 
--- Test
---
---
--- >>> fst unitTest == snd unitTest
--- True
---
--- >>> prefixLookup (fst unitTest) ""
--- Just ((4,"4") :| [(3,"3"),(2,"2"),(1,"1")])
-blah = undefined
-
-
 unitTest :: (PrioTrie Integer String, PrioTrie Integer String)
 unitTest =
   (fromList id inputList, trie)
