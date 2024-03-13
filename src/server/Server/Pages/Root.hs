@@ -29,7 +29,7 @@ form :: T.Text -> Html () -> Html ()
 form targetId initialSuggestions = do
   h3_ "Search"
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
-  form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId)] $ do
+  form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId), role_ "search"] $ do
     (srcInput, dstInput) <- mkTypeaheadInputs initialSuggestions
     label_ [for_ "src"] "FROM type: "
     srcInput
