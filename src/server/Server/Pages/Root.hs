@@ -41,7 +41,7 @@ mkTypeaheadInputs
   :: Html ()
   -> Html (Html (), Html ())
 mkTypeaheadInputs initialSuggestions = do
-  script_ "function checkUserKeydown(event) { console.log(event); return event instanceof KeyboardEvent }"
+  script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
   pure
     ( mkInput "src" [placeholder_ "FROM type"]
     , mkInput "dst" [placeholder_ "TO type"]
