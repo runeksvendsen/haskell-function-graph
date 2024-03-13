@@ -68,7 +68,7 @@ functionWeight (src, dst) function
   | otherwise = 1
   where
     fnPkg = _function_package function
-    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
+    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst) -- TODO: 'fqtPackage' is broken
 
 -- | Run 'runQueryAllST'
 runQueryAll
