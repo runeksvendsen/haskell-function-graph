@@ -55,6 +55,7 @@ mkTypeaheadInputs initialSuggestions = do
       input_ $ attrs ++
         [ name_ id'
         , id_ id'
+        , type_ "search"
         , list_ typeSuggestionsId
         , hxGet_ "/typeahead" -- TODO: use something type-safe
         , hxTarget_ $ "#" <> typeSuggestionsId
