@@ -10,6 +10,7 @@ import Control.Monad (forM_, forM)
 import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
+import qualified FunGraph.Types as FunGraph
 import Control.Monad.ST (stToIO)
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Map.Strict as Map
@@ -78,6 +79,7 @@ suggestions
 suggestions prioTrie prefix = do
   forM_ mSuggestions $ \suggestionsLst ->
     forM_ suggestionsLst $ \(_, fqt) ->
-      option_ [value_ $ TE.decodeUtf8 $ FunGraph.unFullyQualifiedType fqt] ""
+      option_ [value_ $ TE.decodeUtf8 $ FunGraph.unFullyQualifiedType fqt] $
+        toHtml (FunGraph.fqtPackage fqt) -- NOTE: Just testing the effect of putting something here
   where
     mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
