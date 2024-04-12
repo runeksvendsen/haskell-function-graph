@@ -34,7 +34,6 @@ page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
 page graph src dst maxCount = do
   resultGraphE <- liftIO renderResultGraphIO
   pure $ do
-    p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
     table_ $ do
       thead_ $
         tr_ $ do
