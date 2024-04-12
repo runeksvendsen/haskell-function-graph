@@ -33,7 +33,7 @@ mkHandlers appendToHead igraph = do
   (typeaheadHandler, initalSuggestions) <-
     Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) igraph
   pure $ Handlers
-        (Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead) initalSuggestions)
+        (Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions)
         (Server.Pages.Search.handler igraph)
         typeaheadHandler
   where
@@ -44,6 +44,12 @@ mkHandlers appendToHead igraph = do
       , "  max-width: 100%;"
       , "  height: 400%;"
       , "  display: block;"
+      , "}"
+      ]
+
+    bodyMargin = style_ $ T.unlines
+      [ "body {"
+      , "  margin: 20px;"
       , "}"
       ]
 
