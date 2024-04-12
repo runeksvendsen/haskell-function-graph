@@ -7,7 +7,6 @@
 -- | Query the function graph.
 --
 --   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
---   TODO: Bug: type that is a function (should not happen): 'logging-facade-0.3.1:System.Logging.Facade.Types.LogRecord -> ghc-prim-0.10.0:GHC.Types.IO ()'
 module FunGraph
   ( -- * Queries
     runQueryAll, runQueryTree, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
