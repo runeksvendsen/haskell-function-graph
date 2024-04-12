@@ -19,7 +19,7 @@ page appendToHead initialSuggestions = doctypehtml_ $ do
     title_ "Haskell Function Graph"
     appendToHead
   body_ $ do
-    div_ [id_ "header"] "Search for compositions of functions"
+    h1_ "Search for compositions of functions"
     let targetId = "search_result"
     form targetId initialSuggestions
     h3_ "Results"
