@@ -9,37 +9,59 @@ where
 import Lucid
 import Lucid.Htmx
 import qualified Data.Text as T
-import qualified FunGraph.Examples as Examples
-import qualified FunGraph
-import Control.Monad (forM_)
 
-page :: Html () -> Html ()
-page appendToHead = doctypehtml_ $ do
+page
+  :: Html () -- ^ Append to 'head' element
+  -> Html () -- ^ Initial typeahead suggestions (sequence of 'option' elements)
+  -> Html ()
+page appendToHead initialSuggestions = doctypehtml_ $ do
   head_ $ do
     title_ "Haskell Function Graph"
     appendToHead
   body_ $ do
-    div_ [id_ "header"] "Search for compositions of functions"
+    h1_ "Search for compositions of functions"
     let targetId = "search_result"
-    form targetId
+    form targetId initialSuggestions
     h3_ "Results"
     div_ [id_ targetId] ""
 
-form :: T.Text -> Html ()
-form targetId = do
+form :: T.Text -> Html () -> Html ()
+form targetId initialSuggestions = do
   h3_ "Search"
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
-  form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId)] $ do
+  form_ [hxGet_ "/search", hxTarget_ ("#" <> targetId), role_ "search"] $ do
+    (srcInput, dstInput) <- mkTypeaheadInputs initialSuggestions
     label_ [for_ "src"] "FROM type: "
-    input_ [name_ "src", id_ "src", list_ "type_suggestions", placeholder_ "FROM type"]
-    suggestions "type_suggestions"
+    srcInput
     label_ [for_ "dst"] "TO type: "
-    input_ [name_ "dst", id_ "dst", list_ "type_suggestions", placeholder_ "TO type"]
-    suggestions "type_suggestions"
+    dstInput
     button_ [] "Search"
 
-suggestions :: T.Text -> Html ()
-suggestions id' = do
-  datalist_ [id_ id'] $ do
-    forM_ Examples.all $ \example ->
-       option_ [value_ $ FunGraph.fullyQualifiedTypeToText (fst example)] ""
+mkTypeaheadInputs
+  :: Html ()
+  -> Html (Html (), Html ())
+mkTypeaheadInputs initialSuggestions = do
+  script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
+  pure
+    ( mkInput "src" [placeholder_ "FROM type"]
+    , mkInput "dst" [placeholder_ "TO type"]
+    )
+  where
+    typeSuggestionsBaseId = "type_suggestions"
+
+    mkInput id' attrs = do
+      let typeSuggestionsId = typeSuggestionsBaseId <> "_" <> id'
+      mkSuggestions typeSuggestionsId initialSuggestions
+      input_ $ attrs ++
+        [ name_ id'
+        , id_ id'
+        , type_ "search"
+        , list_ typeSuggestionsId
+        , hxGet_ "/typeahead" -- TODO: use something type-safe
+        , hxTarget_ $ "#" <> typeSuggestionsId
+        , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
+        ]
+
+mkSuggestions :: T.Text -> Html () -> Html ()
+mkSuggestions id' =
+  datalist_ [id_ id']

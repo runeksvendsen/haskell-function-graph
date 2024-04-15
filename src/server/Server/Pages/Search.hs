@@ -28,13 +28,12 @@ handler graph (Just src) (Just dst) mMaxCount =
   let defaultLimit = 100 -- TODO: add as HTML input field
   in page graph src dst (fromMaybe defaultLimit mMaxCount)
 handler _ _ _ _ =
-  throwError $ err400 { errBody = "Your request makes no sense to me." }
+  throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
 page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
 page graph src dst maxCount = do
   resultGraphE <- liftIO renderResultGraphIO
   pure $ do
-    p_ $ "Hi there, you entered src=" <> mono (toHtml src) <> ", dst=" <> mono (toHtml dst)
     table_ $ do
       thead_ $
         tr_ $ do
@@ -72,7 +71,7 @@ page graph src dst maxCount = do
         >>= Util.graphToDot ""
 
     query =
-      FunGraph.runQueryTree
+      FunGraph.runQueryTree -- TODO: use 'runQueryTreeST' to avoid 'thaw' on every request
         (fromIntegral maxCount)
         srcDst
         graph

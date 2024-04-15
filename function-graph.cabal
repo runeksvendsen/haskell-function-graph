@@ -44,8 +44,11 @@ library function-graph-server
                       Server.Monad
                       Server.Pages.Root
                       Server.Pages.Search
+                      Server.Pages.Typeahead
                       Server.GraphViz
+                      Data.PrioTrie
     build-depends:    base
+                    , bellman-ford
                     , function-graph
                     , text
                     , bytestring
@@ -63,6 +66,7 @@ library function-graph-server
                     -- END: Server.GraphViz
                     , servant-errors
                     , wai-extra
+                    , deepseq
     hs-source-dirs:   src/server
     default-language: Haskell2010
 

@@ -7,6 +7,7 @@
 -- | Query the function graph.
 --
 --   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
+--   TODO: Bug: type that is a function (should not happen): 'logging-facade-0.3.1:System.Logging.Facade.Types.LogRecord -> ghc-prim-0.10.0:GHC.Types.IO ()'
 module FunGraph
   ( -- * Queries
     runQueryAll, runQueryTree, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
@@ -67,7 +68,7 @@ functionWeight (src, dst) function
   | otherwise = 1
   where
     fnPkg = _function_package function
-    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
+    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst) -- TODO: 'fqtPackage' is broken
 
 -- | Run 'runQueryAllST'
 runQueryAll
@@ -156,7 +157,7 @@ runQueryTreeST
   -> ST s [([NE.NonEmpty TypedFunction], Double)]
 runQueryTreeST runner maxCount (src, dst) = do
   res <- runner weightCombine initialWeight $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 2 (src, dst) -- TODO: factor out "level" arg
+    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
   pure $ map (first (map (removeNonMin . DG.eMeta))) res
   where
     -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'

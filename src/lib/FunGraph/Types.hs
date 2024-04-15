@@ -183,6 +183,8 @@ instance Show PrettyTypedFunction where
 newtype FullyQualifiedType = FullyQualifiedType { unFullyQualifiedType :: BS.ByteString }
   deriving (Eq, Ord, Show, Generic, IsString, NFData)
 
+-- | TODO: Broken. Only works for types that use a single type constructor,
+--   e.g. /not/: list, tuple, "Maybe X" etc.
 fqtPackage :: FullyQualifiedType -> BS.ByteString
 fqtPackage = BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
 
