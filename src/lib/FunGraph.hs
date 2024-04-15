@@ -207,7 +207,7 @@ traceFunDebug = \case
         , show weight <> "."
         , "Paths:\n"
         , let allPaths = spTreeToPaths (map DG.eMeta path)
-              renderTypeSig = bsToStr . showTypeSig . typedFunctionsPathTypes
+              renderTypeSig = T.unpack . showTypeSig . typedFunctionsPathTypes
           in unlines $ map (\fn -> "\t" <> renderComposedFunctionsStr fn <> " :: " <> renderTypeSig fn) allPaths
         ]
 
@@ -259,7 +259,7 @@ traceFunDebug = \case
           mkFinalString str
             | null types = "no path"
             | otherwise = str
-      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> bsToStr (showTypeSig types) <> ")"
+      in mkFinalString $ "(" <> maybe "_" mkFunctionsStr mFunctions <> " :: " <> T.unpack (showTypeSig types) <> ")"
 
     traceInterestingPush
       :: DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)

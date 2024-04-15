@@ -23,6 +23,8 @@ import Control.Monad.ST (ST)
 import qualified Data.Set as Set
 import qualified Lucid
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import qualified Types
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -48,9 +50,9 @@ idxEdgePathTypes
 idxEdgePathTypes = toPathTypes DG.eTo DG.eFrom
 
 -- | Show vertices moved through
-showTypeSig :: [FullyQualifiedType] -> BS.ByteString
+showTypeSig :: [FullyQualifiedType] -> T.Text
 showTypeSig =
-  BS.intercalate " -> " . map unFullyQualifiedType
+  T.intercalate " -> " . map (Types.renderFgTypeFgTyConQualified . unFullyQualifiedType)
 
 bsToStr :: BSC8.ByteString -> String
 bsToStr = UTF8.decode . BS.unpack
@@ -74,7 +76,7 @@ graphToDot name =
 
       edgeAttributes fn = Map.fromList
         [ ( "label"
-          , DG.DotString_DoubleQuoted $ LT.fromStrict . TE.decodeUtf8 $ _function_name fn
+          , DG.DotString_DoubleQuoted $ LT.fromStrict $ _function_name fn
           )
         , ( "labeltooltip"
           , DG.DotString_DoubleQuoted $ LT.pack $ show $ PrettyTypedFunction fn
@@ -82,7 +84,7 @@ graphToDot name =
         ]
 
   in DG.graphToDotMulti
-    (vertexAttributes . bsToLT . unFullyQualifiedType)
+    (vertexAttributes . LT.fromStrict . Types.renderFgTypeFgTyConQualified . unFullyQualifiedType)
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
 
