@@ -4,6 +4,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveGeneric #-}
+-- TODO: document
 module Data.PrioTrie
 ( PrioTrie(..)
 , prefixLookup
@@ -33,6 +34,7 @@ data PrioTrie prio a
 
 instance (NFData prio, NFData a) => NFData (PrioTrie prio a)
 
+-- TODO: move to unit test
 unitTest :: (PrioTrie Integer String, PrioTrie Integer String)
 unitTest =
   (fromList id inputList, trie)
