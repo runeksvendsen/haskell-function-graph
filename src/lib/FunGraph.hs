@@ -42,6 +42,8 @@ import Data.Maybe (listToMaybe, fromMaybe)
 import Debug.Trace (traceM)
 import Control.Applicative ((<|>))
 import Data.Bifunctor (first)
+import qualified Data.Text as T
+import qualified Types
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -63,10 +65,12 @@ spTreePathsCount = do
 
 functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> TypedFunction -> Double
 functionWeight (src, dst) function
+  -- NOTE: We want to prioritize a function from the same package as the src/dst type -- e.g. a function from the "text" package in case we want to go to/from the "Text" type.
+  -- TODO: but what what about e.g. "Maybe Text" (where "Maybe" is defined in "base" and "Text" in "text")?
   | srcPkg == fnPkg || dstPkg == fnPkg = 0.5
   | otherwise = 1
   where
-    fnPkg = _function_package function
+    fnPkg = NE.singleton $ _function_package function
     (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst) -- TODO: 'fqtPackage' is broken
 
 -- | Run 'runQueryAllST'
@@ -183,9 +187,9 @@ traceFunDebug
   :: Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
   -> ST s ()
 traceFunDebug = \case
-    Dijkstra.TraceEvent_Init srcVertex _ -> traceM $ unwords
+    Dijkstra.TraceEvent_Init srcVertex _ -> traceM . T.unpack $ T.unwords
       [ "Starting Bellman-Ford for source vertex"
-      , bsToStr (unFullyQualifiedType (fst srcVertex))
+      , Types.renderFgTypeFgTyConQualified (unFullyQualifiedType (fst srcVertex))
       ]
 
     Dijkstra.TraceEvent_Push edge weight pathTo ->
@@ -209,24 +213,30 @@ traceFunDebug = \case
 
     _ -> pure ()
   where
-    interestingVertices = Set.fromList $ map FullyQualifiedType
+    interestingVertices = Set.fromList $ map (FullyQualifiedType . parsePprTyConSingleton)
       [ "bytestring-0.11.4.0:Data.ByteString.Lazy.Internal.ByteString"
       , "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
       , "text-2.0.2:Data.Text.Internal.Lazy.Text"
       , "text-2.0.2:Data.Text.Internal.Text"
       ]
 
+    parsePprTyConSingleton txt =
+      either (error $ "BUG: parsePprTyConSingleton: " <> show txt) id ((`Types.FgType_TyConApp` []) <$> Types.parsePprTyCon txt)
+
+    parsePackageWithVersion' pkg =
+      either (error $ "BUG: parsePackageWithVersion': " <> show pkg) id (Types.parsePackageWithVersion pkg)
+
     interestingFunctions = Set.fromList
       [ Function
           { _function_name = "toStrict"
           , _function_module = "Data.ByteString"
-          , _function_package = "bytestring-0.11.4.0"
+          , _function_package = parsePackageWithVersion' "bytestring-0.11.4.0"
           , _function_typeSig = Json.FunctionType () ()
           }
       , Function
           { _function_name = "encodeUtf16LE"
           , _function_module = "Data.Text.Lazy.Encoding"
-          , _function_package = "text-2.0.2"
+          , _function_package = parsePackageWithVersion' "text-2.0.2"
           , _function_typeSig = Json.FunctionType () ()
           }
       ]
@@ -245,7 +255,7 @@ traceFunDebug = \case
     showInterestingPath :: (Maybe [[TypedFunction]], [FullyQualifiedType]) -> String
     showInterestingPath (mFunctions, types) =
       let mkFunctionsStr =
-            intercalate " -> " . map (maybe "uninteresting" (bsToStr . renderFunction) . listToMaybe)
+            intercalate " -> " . map (maybe "uninteresting" (T.unpack . renderFunction) . listToMaybe)
           mkFinalString str
             | null types = "no path"
             | otherwise = str
@@ -265,7 +275,7 @@ traceFunDebug = \case
           [ "Queued vertex with prio"
           , show weight
           , "to"
-          , bsToStr $ unFullyQualifiedType $ DG.eTo edge'
+          , T.unpack $ Types.renderFgTypeFgTyConQualified $ unFullyQualifiedType $ DG.eTo edge'
           , "through edge"
           , showInterestingPath interestingEdge <> "."
           , "Path to 'from':"
@@ -278,7 +288,7 @@ traceFunDebug = \case
         then Just $ unwords
           [ "Popped vertex with prio"
           , show weight <> ":"
-          , bsToStr (unFullyQualifiedType v) <> "."
+          , T.unpack $ Types.renderFgTypeFgTyConQualified (unFullyQualifiedType v) <> "."
           , "Path to vertex:"
           , showInterestingPath interestingPath
           ]

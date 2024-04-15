@@ -156,9 +156,14 @@ newtype FullyQualifiedType = FullyQualifiedType
   deriving (Eq, Ord, Show, Generic, NFData)
 
 -- | TODO: What's the meaning of this? What should it return for e.g. @base-4.18.0.0:Data.Either.Either text-2.0.2:Data.Text.Internal.Text base-4.18.0.0:GHC.Base.String@
-fqtPackage :: FullyQualifiedType -> BS.ByteString
-fqtPackage = error "TODO"
-  -- BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
+fqtPackage :: FullyQualifiedType -> NE.NonEmpty (Types.FgPackage T.Text)
+fqtPackage fqt =
+  fromMaybe (error $ "fqtPackage: empty list: " <> show fqt)
+    . NE.nonEmpty
+    . map Types.fgTyConPackage
+    . foldr (:) []
+    . unFullyQualifiedType
+    $ fqt
 
 -- TODO
 textToFullyQualifiedType
