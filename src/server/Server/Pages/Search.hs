@@ -55,7 +55,7 @@ page graph src dst maxCount = do
       toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
       resultGraphE
   where
-    srcDst =
+    srcDst = -- WIP: doesn't work, cf. 'textToFullyQualifiedType'
       (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
 
     results =

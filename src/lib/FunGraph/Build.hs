@@ -28,6 +28,7 @@ import qualified Data.Set as Set
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Codec.Binary.UTF8.String as UTF8
 import Data.Maybe (mapMaybe)
+import qualified Types
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -70,7 +71,7 @@ buildGraphMut cfg =
     excludeTypesUnqualified = buildConfig_excludeTypesUnqualified cfg
 
     isExcludedPackage =
-      (`Set.member` excludePackages) . packageNoVersion . strToBs . Json.declarationMapJson_package
+      (`Set.member` excludePackages) . Types.fgPackageName . Json.declarationMapJson_package
 
     isExcludedFunction :: TypedFunction -> Bool
     isExcludedFunction function =

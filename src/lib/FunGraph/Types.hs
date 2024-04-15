@@ -9,7 +9,7 @@ module FunGraph.Types
   , UntypedFunction
   , PrettyTypedFunction(..)
   , FullyQualifiedType(..)
-  , functionPackageNoVersion, packageNoVersion
+  , functionPackageNoVersion
   , renderComposedFunctions
   , renderComposedFunctionsStr
   , parseComposedFunctions
@@ -24,29 +24,26 @@ module FunGraph.Types
 
 import qualified Json
 import qualified Data.Graph.Digraph as DG
-import Data.Hashable (Hashable)
+import Data.Hashable (Hashable, hashWithSalt)
 import GHC.Generics (Generic)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSC8
-import qualified Data.ByteString.Search as Search
 import qualified Data.Map as Map
 import Data.Functor ((<&>))
-import qualified Codec.Binary.UTF8.String as UTF8
 import Data.String (IsString)
-import Control.Monad (guard)
 import Data.List (intersperse)
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Text.Encoding as TE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
+import qualified Types
+import Data.Maybe (fromMaybe)
 
 -- | A function that takes a single non-function argument and returns a non-function value.
 --
 -- Generic over type signature.
 data Function typeSig = Function
-  { _function_name :: BS.ByteString -- ^ e.g. "pack"
-  , _function_module :: BS.ByteString -- ^ e.g. "Data.Text"
-  , _function_package :: BS.ByteString -- ^ e.g. "text-1.2.4.1"
+  { _function_name :: T.Text -- ^ e.g. "pack"
+  , _function_module :: T.Text -- ^ e.g. "Data.Text"
+  , _function_package :: Types.FgPackage T.Text -- ^ e.g. @Types.FgPackage "text" "1.2.4.1"@
   , _function_typeSig :: typeSig
   } deriving (Eq, Show, Ord, Generic)
 
@@ -59,61 +56,40 @@ instance Functor Function where
 functionPackageNoVersion
   :: Show typeSig
   => Function typeSig
-  -> BS.ByteString
+  -> T.Text
 functionPackageNoVersion =
-  packageNoVersion . _function_package
-
--- | Extract the package name from a package identifer of the form "text-1.2.4.1" (returns "text").
---
---   Throws an error in case the package identifier does not contain a version.
---
--- >>> packageNoVersion "text-1.2.4.1"
--- "text"
---
--- >>> packageNoVersion "pa-prelude-0.1.0.0"
--- "pa-prelude"
---
--- >>> packageNoVersion "blah-1"
--- "blah"
-packageNoVersion
-  :: BS.ByteString
-  -> BS.ByteString
-packageNoVersion packageName =
-  case Search.split "-" packageName of
-    lst | length lst > 1 ->
-      BS.concat $ intersperse "-" (init lst)
-    _ ->
-      error $ bsToStr $ "Missing version in package identifier: " <> packageName
+  Types.fgPackageName . _function_package
 
 -- | Render composed functions.
 --
 -- Function list is in order of application, e.g. @g . f@ is @[f, g]@.
-renderComposedFunctions :: [Function typeSig] -> BS.ByteString
+renderComposedFunctions :: [Function typeSig] -> T.Text
 renderComposedFunctions fnLst =
-  let dispFunLine = BS.concat . intersperse " . " . map renderFunction . reverse
+  let dispFunLine = T.concat . intersperse " . " . map renderFunction . reverse
   in dispFunLine fnLst
 
 -- | Same as 'renderComposedFunctions' but returns a 'String'
 renderComposedFunctionsStr :: [Function typeSig] -> String
 renderComposedFunctionsStr =
-  bsToStr . renderComposedFunctions
+  T.unpack . renderComposedFunctions
 
 -- | Parse the output of 'renderComposedFunctions'
-parseComposedFunctions :: BS.ByteString -> Maybe (NE.NonEmpty UntypedFunction)
-parseComposedFunctions bs = do
-  bsFunctionList <- NE.nonEmpty $ reverse $ Search.split " . " bs
-  let parsedMaybeFunctions = NE.map parseFunction bsFunctionList
+parseComposedFunctions :: T.Text -> Either String (NE.NonEmpty UntypedFunction)
+parseComposedFunctions txt = do
+  functionList <- maybe (Left "parseComposedFunctions: zero functions") Right $ NE.nonEmpty $ reverse $ T.splitOn " . " txt
+  let parsedMaybeFunctions = NE.map parseFunction functionList
   sequence parsedMaybeFunctions
 
+
 -- | Produce e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
-renderFunction :: Function typeSig -> BS.ByteString
+renderFunction :: Function typeSig -> T.Text
 renderFunction fn =
-  _function_package fn <> ":" <> _function_module fn <> "." <> _function_name fn
+  Types.renderFgPackage (_function_package fn) <> ":" <> _function_module fn <> "." <> _function_name fn
 
 -- | Render a function's name (output of 'renderFunction') and its FROM and TO type.
 renderTypedFunction
   :: TypedFunction
-  -> (BS.ByteString, (FullyQualifiedType, FullyQualifiedType))
+  -> (T.Text, (FullyQualifiedType, FullyQualifiedType))
   -- ^ (output of 'renderFunction', (FROM type, TO type))
 renderTypedFunction fn =
   ( renderFunction fn
@@ -123,7 +99,7 @@ renderTypedFunction fn =
     sig = _function_typeSig fn
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'
-parseFunction :: BSC8.ByteString -> Maybe UntypedFunction
+parseFunction :: T.Text -> Either String UntypedFunction
 parseFunction bs = do
   (name, moduleName, pkg) <- parseIdentifier bs
   pure $ Function name moduleName pkg ()
@@ -132,25 +108,13 @@ parseFunction bs = do
 --
 --   TODO: only works for "simple" types, e.g. NOT types of the form @A B@, @(A, B)@ or @[A]@.
 parseIdentifier
-  :: BS.ByteString
-  -> Maybe (BSC8.ByteString, BSC8.ByteString, BSC8.ByteString)
+  :: T.Text
+  -> Either String (T.Text, T.Text, Types.FgPackage T.Text)
   -- ^ (name, module name, package). E.g. ("encodeUtf16BE", "Data.Text.Encoding", "text-2.0.2")
-parseIdentifier bs =
-  case BSC8.split ':' bs of
-    [pkg, moduleAndName] -> do
-      (moduleNameWithSuffix, name) <- spanEndNonEmpty (not . (== '.')) moduleAndName
-      moduleName <- BS.stripSuffix "." moduleNameWithSuffix
-      guard $ not (BS.null moduleName)
-      pure (name, moduleName, pkg)
-    _ -> Nothing
-  where
-    -- A version of 'spanEnd' that does not return the empty ByteString
-    spanEndNonEmpty f bs' =
-      let (a, b) = BSC8.spanEnd f bs'
-          result
-            | BS.null a || BS.null b = Nothing
-            | otherwise = Just (a, b)
-      in result
+parseIdentifier txt = do
+  -- NOTE: 'Types.parsePprTyCon' is used because a type constructor and an identifer are of the same form (only different is lower/upper case first letter for the 'name')
+  Types.FgTyCon name moduleName package <- Types.parsePprTyCon txt
+  pure (name, moduleName, package)
 
 -- | A typed 'Function'
 type TypedFunction = Function (Json.FunctionType FullyQualifiedType)
@@ -162,12 +126,20 @@ type UntypedFunction = Function ()
 newtype PrettyTypedFunction = PrettyTypedFunction { unPrettyTypedFunction :: TypedFunction }
   deriving (Eq, Ord)
 
+-- TODO: inlined here. use from 'dump-decls'.
+renderFgPackage
+  :: (Data.String.IsString text, Semigroup text)
+  => Types.FgPackage text
+  -> text
+renderFgPackage p =
+  Types.fgPackageName p <> "-" <> Types.fgPackageVersion p
+
 instance Show PrettyTypedFunction where
   show = prettyFunction . unPrettyTypedFunction
     where
       prettyFunction fun =
-        bsToStr $ BS.concat $
-          [_function_package fun
+        T.unpack $ T.concat $
+          [ renderFgPackage $ _function_package fun
           , ":"
           , _function_module fun
           , "."
@@ -176,48 +148,50 @@ instance Show PrettyTypedFunction where
             let sig = _function_typeSig fun
                 arg = unFullyQualifiedType $ Json.functionType_arg sig
                 ret = unFullyQualifiedType $ Json.functionType_ret sig
-            in [" :: ", arg, " -> ", ret]
+            in [" :: ", Types.renderFgTypeFgTyConQualified arg, " -> ", Types.renderFgTypeFgTyConQualified ret]
 
--- | E.g. "base-4.18.0.0:GHC.Ptr.Ptr zstd-0.1.3.0:Codec.Compression.Zstd.FFI.Types.DDict".
---   Guaranteed to not be a function type (ie. will not contain any function arrows).
-newtype FullyQualifiedType = FullyQualifiedType { unFullyQualifiedType :: BS.ByteString }
-  deriving (Eq, Ord, Show, Generic, IsString, NFData)
+-- TODO: temporary wrapper
+newtype FullyQualifiedType = FullyQualifiedType
+  { unFullyQualifiedType :: Types.FgType (Types.FgTyCon T.Text) }
+  deriving (Eq, Ord, Show, Generic, NFData)
 
--- | TODO: Broken. Only works for types that use a single type constructor,
---   e.g. /not/: list, tuple, "Maybe X" etc.
+-- | TODO: What's the meaning of this? What should it return for e.g. @base-4.18.0.0:Data.Either.Either text-2.0.2:Data.Text.Internal.Text base-4.18.0.0:GHC.Base.String@
 fqtPackage :: FullyQualifiedType -> BS.ByteString
-fqtPackage = BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
+fqtPackage = error "TODO"
+  -- BS.takeWhile (/= toEnum (fromEnum ':')) . unFullyQualifiedType
 
+-- TODO
 textToFullyQualifiedType
   :: T.Text
   -> FullyQualifiedType
-textToFullyQualifiedType =
-  FullyQualifiedType . TE.encodeUtf8
+textToFullyQualifiedType = error "TODO"
+  -- FullyQualifiedType . fmap ((`FgType_TyConApp` []) . fmap TE.encodeUtf8) . Types.parsePprTyCon
 
 fullyQualifiedTypeToText
   :: FullyQualifiedType
   -> T.Text
 fullyQualifiedTypeToText =
-  TE.decodeUtf8 . unFullyQualifiedType
+  Types.renderFgTypeFgTyConQualified . unFullyQualifiedType
 
 instance Hashable FullyQualifiedType
 
+-- WIP
+instance Hashable (Types.FgType (Types.FgTyCon T.Text)) where
+  hashWithSalt = error "TODO"
+
 declarationMapJsonToFunctions
-  :: Json.DeclarationMapJson String
+  :: Json.DeclarationMapJson T.Text
   -> [TypedFunction]
 declarationMapJsonToFunctions dmj = concat $
   Map.toList moduleDeclarations <&> \(moduleName, nameMap) ->
-    Map.toList nameMap <&> \(functionName, functionType) ->
-      Function functionName moduleName package (FullyQualifiedType <$> functionType)
+    Map.toList nameMap <&> \(functionName, typeInfo) ->
+      Function functionName moduleName package (FullyQualifiedType <$> typeInfoToFunctionType typeInfo)
   where
-    moduleDeclarations = Json.moduleDeclarations_map (Json.declarationMapJson_moduleDeclarations dmj')
-    dmj' = Json.fmapDeclarationMapJson (BS.pack . UTF8.encode) dmj
-    package = Json.declarationMapJson_package dmj'
+    typeInfoToFunctionType ti = fromMaybe (Json.typeInfo_unexpanded ti) (Json.typeInfo_expanded ti)
+    moduleDeclarations = Json.moduleDeclarations_map (Json.declarationMapJson_moduleDeclarations dmj)
+    package = Json.declarationMapJson_package dmj
 
 instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   fromNode = Json.functionType_arg . _function_typeSig
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
-
-bsToStr :: BSC8.ByteString -> String
-bsToStr = UTF8.decode . BS.unpack
