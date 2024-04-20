@@ -42,7 +42,7 @@ mkPrioTrie
      -- ^ 'Nothing' if the input graph is empty
 mkPrioTrie mLimit graph = do
   countList <- stToIO $ do
-    (outMap, inMap) <- DG.outgoingIncomingCount graph
+    (outMap, inMap) <- DG.outgoingIncomingCount graph -- TODO: instead, count the number of different packages that export functions which operate on a given type (to avoid a single package exporting a large number of functions operating on a type being rated highly). Use 'DG.foldEdges' to implement this.
     let countMap = Map.unionWith (+) outMap inMap
     mapM (traverse (lookupVertexId graph) . swap) (Map.toList countMap)
   let mTypeaheadData :: Maybe (NE.NonEmpty (BS.ByteString, (Word, FunGraph.FullyQualifiedType)))
