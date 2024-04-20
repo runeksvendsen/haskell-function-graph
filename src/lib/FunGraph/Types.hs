@@ -9,7 +9,7 @@ module FunGraph.Types
   , TypedFunction
   , UntypedFunction
   , PrettyTypedFunction(..)
-  , FullyQualifiedType, renderFullyQualifiedType, renderFullyQualifiedTypeUnqualified
+  , FullyQualifiedType, renderFullyQualifiedType, renderFullyQualifiedTypeUnqualified, renderFullyQualifiedTypeNoPackage
   , functionPackageNoVersion, renderFunctionPackage
   , renderComposedFunctions
   , renderComposedFunctionsStr
@@ -171,6 +171,9 @@ renderFullyQualifiedType = Types.renderFgTypeFgTyConQualified . unFullyQualified
 
 renderFullyQualifiedTypeUnqualified :: FullyQualifiedType -> T.Text
 renderFullyQualifiedTypeUnqualified = Types.renderFgTypeFgTyConUnqualified . unFullyQualifiedType
+
+renderFullyQualifiedTypeNoPackage :: FullyQualifiedType -> T.Text
+renderFullyQualifiedTypeNoPackage = Types.renderFgTypeFgTyConQualifiedNoPackage . unFullyQualifiedType
 
 fqtPackage :: FullyQualifiedType -> NE.NonEmpty (Types.FgPackage T.Text)
 fqtPackage fqt =

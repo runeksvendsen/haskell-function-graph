@@ -78,7 +78,10 @@ suggestions
 suggestions prioTrie prefix = do
   forM_ mSuggestions $ \suggestionsLst ->
     forM_ suggestionsLst $ \(_, fqt) ->
-      option_ [value_ $ FunGraph.renderFullyQualifiedType fqt] $
-        toHtml (FunGraph.renderFullyQualifiedTypeUnqualified fqt)
+      option_
+        [ value_ $ FunGraph.renderFullyQualifiedType fqt
+        , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
+        ]
+        ""
   where
     mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
