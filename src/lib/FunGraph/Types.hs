@@ -3,13 +3,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module FunGraph.Types
   ( Function(..)
   , TypedFunction
   , UntypedFunction
   , PrettyTypedFunction(..)
-  , FullyQualifiedType(..)
-  , functionPackageNoVersion
+  , FullyQualifiedType, renderFullyQualifiedType, renderFullyQualifiedTypeUnqualified
+  , functionPackageNoVersion, renderFunctionPackage
   , renderComposedFunctions
   , renderComposedFunctionsStr
   , parseComposedFunctions
@@ -17,16 +18,17 @@ module FunGraph.Types
   , renderTypedFunction
   , parseIdentifier, parseFunction
   , fqtPackage
-  , textToFullyQualifiedType
   , fullyQualifiedTypeToText
   , declarationMapJsonToFunctions
+  , parsePprTyConSingleton
+  -- * Re-exports
+  , Types.fgPackageName, Types.renderFgPackage
   ) where
 
 import qualified Json
 import qualified Data.Graph.Digraph as DG
 import Data.Hashable (Hashable, hashWithSalt)
 import GHC.Generics (Generic)
-import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Functor ((<&>))
 import Data.String (IsString)
@@ -36,6 +38,8 @@ import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import qualified Types
 import Data.Maybe (fromMaybe)
+import GHC.Stack (HasCallStack)
+import qualified Data.Hashable.Generic
 
 -- | A function that takes a single non-function argument and returns a non-function value.
 --
@@ -59,6 +63,13 @@ functionPackageNoVersion
   -> T.Text
 functionPackageNoVersion =
   Types.fgPackageName . _function_package
+
+renderFunctionPackage
+  :: Show typeSig
+  => Function typeSig
+  -> T.Text
+renderFunctionPackage =
+  Types.renderFgPackage . _function_package
 
 -- | Render composed functions.
 --
@@ -155,7 +166,12 @@ newtype FullyQualifiedType = FullyQualifiedType
   { unFullyQualifiedType :: Types.FgType (Types.FgTyCon T.Text) }
   deriving (Eq, Ord, Show, Generic, NFData)
 
--- | TODO: What's the meaning of this? What should it return for e.g. @base-4.18.0.0:Data.Either.Either text-2.0.2:Data.Text.Internal.Text base-4.18.0.0:GHC.Base.String@
+renderFullyQualifiedType :: FullyQualifiedType -> T.Text
+renderFullyQualifiedType = Types.renderFgTypeFgTyConQualified . unFullyQualifiedType
+
+renderFullyQualifiedTypeUnqualified :: FullyQualifiedType -> T.Text
+renderFullyQualifiedTypeUnqualified = Types.renderFgTypeFgTyConUnqualified . unFullyQualifiedType
+
 fqtPackage :: FullyQualifiedType -> NE.NonEmpty (Types.FgPackage T.Text)
 fqtPackage fqt =
   fromMaybe (error $ "fqtPackage: empty list: " <> show fqt)
@@ -165,24 +181,27 @@ fqtPackage fqt =
     . unFullyQualifiedType
     $ fqt
 
--- TODO
-textToFullyQualifiedType
-  :: T.Text
-  -> FullyQualifiedType
-textToFullyQualifiedType = error "TODO"
-  -- FullyQualifiedType . fmap ((`FgType_TyConApp` []) . fmap TE.encodeUtf8) . Types.parsePprTyCon
-
 fullyQualifiedTypeToText
   :: FullyQualifiedType
   -> T.Text
 fullyQualifiedTypeToText =
   Types.renderFgTypeFgTyConQualified . unFullyQualifiedType
 
-instance Hashable FullyQualifiedType
+instance Hashable FullyQualifiedType where
+  hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
 
 -- WIP
 instance Hashable (Types.FgType (Types.FgTyCon T.Text)) where
-  hashWithSalt = error "TODO"
+  hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
+
+instance Hashable (Types.FgTyCon T.Text) where
+  hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
+
+instance Hashable (Types.FgPackage T.Text) where
+  hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
+
+instance Hashable Types.Boxity where
+  hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
 
 declarationMapJsonToFunctions
   :: Json.DeclarationMapJson T.Text
@@ -200,3 +219,11 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   fromNode = Json.functionType_arg . _function_typeSig
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
+
+
+parsePprTyConSingleton
+  :: HasCallStack
+  => T.Text
+  -> FullyQualifiedType
+parsePprTyConSingleton txt = FullyQualifiedType $
+  either (error $ "BUG: parsePprTyConSingleton: " <> show txt) id ((`Types.FgType_TyConApp` []) <$> Types.parsePprTyCon txt)

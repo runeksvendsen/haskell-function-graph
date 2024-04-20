@@ -61,6 +61,7 @@ library function-graph-server
                     , warp
                     , mtl
                     , containers
+                    , unordered-containers
                     -- BEGIN: Server.GraphViz
                     , process
                     -- END: Server.GraphViz
@@ -84,7 +85,7 @@ executable function-graph
     import:           warnings
     main-is:          Main.hs
     hs-source-dirs:   app
-    build-depends:    base, function-graph, bellman-ford, containers, ansi-terminal
+    build-depends:    base, function-graph, bellman-ford, containers, ansi-terminal, text
     default-language: Haskell2010
 
 executable benchmark

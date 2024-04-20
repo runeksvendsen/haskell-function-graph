@@ -16,9 +16,10 @@ module FunGraph
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction, renderTypedFunction
     -- * Types
-  , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion
-  , FullyQualifiedType(..), textToFullyQualifiedType, fullyQualifiedTypeToText
+  , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion, renderFunctionPackage
+  , FullyQualifiedType, renderFullyQualifiedType, fullyQualifiedTypeToText
   -- * Re-exports
+  , module Types
   , module Export
   , Json.FunctionType
   , DG.IDigraph, DG.Digraph
@@ -26,7 +27,7 @@ module FunGraph
   , DG.freeze, DG.thaw
   ) where
 
-import FunGraph.Types
+import FunGraph.Types as Types
 import FunGraph.Util
 import FunGraph.Build as Export
 import qualified Json
@@ -88,12 +89,10 @@ runQueryAll maxCount (src, dst) graph =
 runQueryTree
   :: Int
   -> (FullyQualifiedType, FullyQualifiedType)
-  -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> [([NE.NonEmpty TypedFunction], Double)]
-runQueryTree maxCount (src, dst) graph =
-  ST.runST $ do
-    g <- DG.thaw graph
-    runQueryTreeST (Dijkstra.runDijkstra g) maxCount (src, dst)
+  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
+  -> ST s [([NE.NonEmpty TypedFunction], Double)]
+runQueryTree maxCount (src, dst) g =
+  runQueryTreeST (Dijkstra.runDijkstra g) maxCount (src, dst)
 
 -- | Passed to 'runQueryAllST' to run without tracing
 runQuery
@@ -189,7 +188,7 @@ traceFunDebug
 traceFunDebug = \case
     Dijkstra.TraceEvent_Init srcVertex _ -> traceM . T.unpack $ T.unwords
       [ "Starting Bellman-Ford for source vertex"
-      , Types.renderFgTypeFgTyConQualified (unFullyQualifiedType (fst srcVertex))
+      , renderFullyQualifiedType (fst srcVertex)
       ]
 
     Dijkstra.TraceEvent_Push edge weight pathTo ->
@@ -213,15 +212,12 @@ traceFunDebug = \case
 
     _ -> pure ()
   where
-    interestingVertices = Set.fromList $ map (FullyQualifiedType . parsePprTyConSingleton)
+    interestingVertices = Set.fromList $ map parsePprTyConSingleton
       [ "bytestring-0.11.4.0:Data.ByteString.Lazy.Internal.ByteString"
       , "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
       , "text-2.0.2:Data.Text.Internal.Lazy.Text"
       , "text-2.0.2:Data.Text.Internal.Text"
       ]
-
-    parsePprTyConSingleton txt =
-      either (error $ "BUG: parsePprTyConSingleton: " <> show txt) id ((`Types.FgType_TyConApp` []) <$> Types.parsePprTyCon txt)
 
     parsePackageWithVersion' pkg =
       either (error $ "BUG: parsePackageWithVersion': " <> show pkg) id (Types.parsePackageWithVersion pkg)
@@ -275,7 +271,7 @@ traceFunDebug = \case
           [ "Queued vertex with prio"
           , show weight
           , "to"
-          , T.unpack $ Types.renderFgTypeFgTyConQualified $ unFullyQualifiedType $ DG.eTo edge'
+          , T.unpack $ renderFullyQualifiedType $ DG.eTo edge'
           , "through edge"
           , showInterestingPath interestingEdge <> "."
           , "Path to 'from':"
@@ -288,7 +284,7 @@ traceFunDebug = \case
         then Just $ unwords
           [ "Popped vertex with prio"
           , show weight <> ":"
-          , T.unpack $ Types.renderFgTypeFgTyConQualified (unFullyQualifiedType v) <> "."
+          , T.unpack $ renderFullyQualifiedType v <> "."
           , "Path to vertex:"
           , showInterestingPath interestingPath
           ]

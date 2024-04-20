@@ -17,8 +17,6 @@ import qualified FunGraph
 import FunGraph.Examples
 
 import Data.Functor (void)
-import Data.Maybe (fromMaybe)
-import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Control.DeepSeq (NFData)
@@ -26,6 +24,7 @@ import GHC.Generics (Generic)
 import qualified Control.Monad.ST as ST
 import Data.Bifunctor (first)
 import qualified Data.Graph.Dijkstra as Dijkstra
+import qualified Data.Text as T
 
 data QueryTest = QueryTest
     { queryTest_name :: String
@@ -40,7 +39,7 @@ data QueryTest = QueryTest
 mkTestCase
   :: Int
   -> ((FunGraph.FullyQualifiedType, String), (FunGraph.FullyQualifiedType, String))
-  -> [BSC8.ByteString]
+  -> [T.Text]
   -> QueryTest
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
@@ -52,12 +51,13 @@ mkTestCase maxCount (from, to) expectedList =
   where
     mapQueryResult = map (first $ PPFunctions . map void)
 
-    fns :: [BSC8.ByteString] -> [PPFunctions]
+    fns :: [T.Text] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)
 
-    fn :: BSC8.ByteString -> NE.NonEmpty FunGraph.UntypedFunction
-    fn bs = fromMaybe
-      (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
+    fn :: T.Text -> NE.NonEmpty FunGraph.UntypedFunction
+    fn bs = either
+      (error $ "parseComposedFunctions: bad input: " <> T.unpack bs)
+      id
       (FunGraph.parseComposedFunctions bs)
 
 allTestCases :: [QueryTest]

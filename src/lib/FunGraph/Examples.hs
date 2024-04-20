@@ -3,6 +3,7 @@
 module FunGraph.Examples where
 
 import FunGraph
+import FunGraph.Types
 
 all :: [(FullyQualifiedType, String)]
 all =
@@ -13,12 +14,12 @@ all =
 
 strictByteString :: (FullyQualifiedType, String)
 strictByteString =
-  ("bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString", "strict ByteString")
+  (parsePprTyConSingleton "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString", "strict ByteString")
 
 lazyText :: (FullyQualifiedType, String)
 lazyText =
-  ("text-2.0.2:Data.Text.Internal.Lazy.Text", "lazy Text")
+  (parsePprTyConSingleton "text-2.0.2:Data.Text.Internal.Lazy.Text", "lazy Text")
 
 string :: (FullyQualifiedType, String)
 string =
-  ("[ghc-prim-0.10.0:GHC.Types.Char]", "String")
+  (parsePprTyConSingleton "[ghc-prim-0.10.0:GHC.Types.Char]", "String")

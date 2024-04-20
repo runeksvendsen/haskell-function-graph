@@ -13,10 +13,12 @@ import Text.Read (readMaybe)
 import qualified Data.Set as Set
 import qualified System.Console.ANSI as ANSI
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Text as T
+import qualified FunGraph.Types as Types
 
 buildConfig :: FunGraph.BuildConfig
 buildConfig = FunGraph.emptyBuildConfig
-  { FunGraph.buildConfig_excludeTypes = Set.fromList
+  { FunGraph.buildConfig_excludeTypes = Set.fromList $ map Types.parsePprTyConSingleton
       [ "[ghc-prim-0.10.0:GHC.Types.Char]"
       , "[[ghc-prim-0.10.0:GHC.Types.Char]]"
       , "base-4.18.0.0:GHC.Real.Ratio ghc-bignum-1.3:GHC.Num.Integer.Integer"
@@ -70,8 +72,8 @@ main = do
               let fns' = map NE.head fns
               in mconcat
                 [ color ANSI.Green $
-                    FunGraph.Util.bsToStr $
-                      FunGraph.unFullyQualifiedType src <> " -> " <> FunGraph.unFullyQualifiedType dst
+                    T.unpack $
+                      FunGraph.renderFullyQualifiedType src <> " -> " <> FunGraph.renderFullyQualifiedType dst
                 , " : "
                 , color ANSI.Red $ renderTypeSig fns'
                 , " : "
@@ -80,7 +82,7 @@ main = do
   where
     maxCount = 1
 
-    renderTypeSig = FunGraph.Util.bsToStr . FunGraph.Util.showTypeSig . FunGraph.Util.typedFunctionsPathTypes
+    renderTypeSig = T.unpack . FunGraph.Util.showTypeSig . FunGraph.Util.typedFunctionsPathTypes
 
     query timoutMillis graph src dst = fmap (fromMaybe []) $
       System.Timeout.timeout (timoutMillis * 1000) $

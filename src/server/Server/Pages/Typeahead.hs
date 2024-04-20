@@ -10,7 +10,6 @@ import Control.Monad (forM_, forM)
 import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
-import qualified FunGraph.Types as FunGraph
 import Control.Monad.ST (stToIO)
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Map.Strict as Map
@@ -26,12 +25,12 @@ import qualified Control.Monad.ST as ST
 
 mkHandler
   :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
-  -> FunGraph.FrozenGraph
+  -> FunGraph.Graph ST.RealWorld
   -> IO ( Maybe T.Text -> Maybe T.Text -> Handler (Html ())
         , Html ()
         ) -- ^ (handler, initial suggestions)
-mkHandler mLimit igraph = do
-  mPrioTrie <- stToIO (DG.thaw igraph) >>= mkPrioTrie mLimit
+mkHandler mLimit graph = do
+  mPrioTrie <- mkPrioTrie mLimit graph
   prioTrie <- maybe (fail "empty input graph in Typeahead handler") pure mPrioTrie
   let initialSuggestions = suggestions prioTrie ""
   pure (handler prioTrie, initialSuggestions)
@@ -48,7 +47,7 @@ mkPrioTrie mLimit graph = do
     mapM (traverse (lookupVertexId graph) . swap) (Map.toList countMap)
   let mTypeaheadData :: Maybe (NE.NonEmpty (BS.ByteString, (Word, FunGraph.FullyQualifiedType)))
       mTypeaheadData = NE.nonEmpty $ countList <&> \(count, fqt) ->
-        (FunGraph.unFullyQualifiedType fqt, (count, fqt))
+        (TE.encodeUtf8 $ FunGraph.renderFullyQualifiedTypeUnqualified fqt, (count, fqt)) -- TODO: use Text
   forM mTypeaheadData $ \typeaheadData ->
   -- typeaheadData <- maybe (fail "Empty graph in Typeahead handler") pure mTypeaheadData
     Ex.evaluate $ Control.DeepSeq.force $
@@ -79,7 +78,7 @@ suggestions
 suggestions prioTrie prefix = do
   forM_ mSuggestions $ \suggestionsLst ->
     forM_ suggestionsLst $ \(_, fqt) ->
-      option_ [value_ $ TE.decodeUtf8 $ FunGraph.unFullyQualifiedType fqt] $
-        toHtml (FunGraph.fqtPackage fqt) -- NOTE: Just testing the effect of putting something here
+      option_ [value_ $ FunGraph.renderFullyQualifiedType fqt] $
+        toHtml (FunGraph.renderFullyQualifiedTypeUnqualified fqt)
   where
     mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)

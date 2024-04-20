@@ -73,8 +73,7 @@ buildGraphMut cfg =
     isExcludedFunction :: TypedFunction -> Bool
     isExcludedFunction function =
       let fnTypes = [DG.fromNode function, DG.toNode function]
-          fnTypesUnqualified = Set.fromList $ map fqtUnqualify fnTypes
-          fqtUnqualify fnType = Types.renderFgTypeFgTyConUnqualified (unFullyQualifiedType fnType)
+          fnTypesUnqualified = Set.fromList $ map renderFullyQualifiedType fnTypes
           intersect types cfgTypes =
             -- 'cfgTypes' is the first argument to (&&) to speed up evaluation with 'emptyBuildConfig'
             not (Set.null cfgTypes) && not (Set.null types) && not (Set.null $ Set.intersection types cfgTypes)

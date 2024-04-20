@@ -16,25 +16,40 @@ import qualified Data.Text as T
 import qualified Server.GraphViz
 import qualified Network.Wai.Middleware.Servant.Errors as Errors
 import qualified Network.Wai.Middleware.RequestLogger as RL
+import qualified System.IO
+import qualified Control.Monad.ST as ST
+import qualified Data.Graph.Digraph as DG
 
 main :: Html () -> Int -> FilePath -> IO ()
 main appendToHead port graphDataFilename = do
   Server.GraphViz.healthCheck
-  FunGraph.withFrozenGraphFromFile FunGraph.defaultBuildConfig graphDataFilename $ \igraph -> do
-    handlers <- mkHandlers appendToHead igraph
+  putStrFlush "Building graph... "
+  FunGraph.withGraphFromFile FunGraph.defaultBuildConfig graphDataFilename $ \graph -> do
+    getGraphInfo graph >>= \graphInfo -> putStrLn $ "done. " <> graphInfo
+    putStrFlush "Initializing handlers... "
+    handlers <- mkHandlers appendToHead graph
+    putStrLn "done"
     putStrLn $ "Running server on " <> "http://localhost:" <> show port
     run port $ app handlers
+  where
+    putStrFlush str = putStr str >> System.IO.hFlush System.IO.stdout
+
+    getGraphInfo graph = ST.stToIO $ do
+      vertexCount <- DG.vertexCount graph
+      edgeCount <- DG.edgeCount graph
+      pure $ "Vertex count: " <> show vertexCount <> ", edge count: " <> show edgeCount <> "."
 
 mkHandlers
   :: Html ()
-  -> FunGraph.FrozenGraph
+  -> FunGraph.Graph ST.RealWorld
   -> IO Handlers
-mkHandlers appendToHead igraph = do
+mkHandlers appendToHead graph = do
   (typeaheadHandler, initalSuggestions) <-
-    Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) igraph
+    Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) graph
+  searchEnv <- Server.Pages.Search.createSearchEnv graph
   pure $ Handlers
         (Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions)
-        (Server.Pages.Search.handler igraph)
+        (Server.Pages.Search.handler searchEnv)
         typeaheadHandler
   where
     typeaheadCountLimit = 25

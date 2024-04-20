@@ -25,6 +25,7 @@ import qualified Lucid
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Types
+import GHC.Stack (HasCallStack)
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -52,7 +53,7 @@ idxEdgePathTypes = toPathTypes DG.eTo DG.eFrom
 -- | Show vertices moved through
 showTypeSig :: [FullyQualifiedType] -> T.Text
 showTypeSig =
-  T.intercalate " -> " . map (Types.renderFgTypeFgTyConQualified . unFullyQualifiedType)
+  T.intercalate " -> " . map renderFullyQualifiedType
 
 bsToStr :: BSC8.ByteString -> String
 bsToStr = UTF8.decode . BS.unpack
@@ -84,7 +85,7 @@ graphToDot name =
         ]
 
   in DG.graphToDotMulti
-    (vertexAttributes . LT.fromStrict . Types.renderFgTypeFgTyConQualified . unFullyQualifiedType)
+    (vertexAttributes . LT.fromStrict . renderFullyQualifiedType)
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
 

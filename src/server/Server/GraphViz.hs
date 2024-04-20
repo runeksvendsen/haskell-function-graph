@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy.Char8
 import qualified Data.Text.Lazy.Encoding
 import qualified Data.ByteString.Char8
 import Data.Bifunctor (first)
+import qualified System.IO
 
 dotExe :: FilePath
 dotExe = "dot"
@@ -49,6 +50,7 @@ runDotExe args stdin = do
 healthCheck :: IO ()
 healthCheck = do
   putStr $ "Checking if '" <> dotExe <> "' executable can be executed... "
+  System.IO.hFlush System.IO.stdout
   runDotExe ["-V"] "" >>= either handleError (const $ pure ())
   putStrLn $ "success"
   where

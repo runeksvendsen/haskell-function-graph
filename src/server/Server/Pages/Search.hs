@@ -5,6 +5,7 @@
 module Server.Pages.Search
 ( page
 , handler
+, SearchEnv, createSearchEnv
 )
 where
 
@@ -14,7 +15,6 @@ import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
 import Data.List (intersperse)
-import qualified Data.Text.Encoding as TE
 import Data.Containers.ListUtils (nubOrd)
 import qualified FunGraph.Util as Util
 import qualified Server.GraphViz
@@ -22,17 +22,41 @@ import qualified Control.Monad.ST as ST
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Except (throwError)
 import Data.Maybe (fromMaybe)
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Graph.Digraph as DG
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Encoding as TLE
 
-handler :: FunGraph.FrozenGraph -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
-handler graph (Just src) (Just dst) mMaxCount =
+-- | Things we want to precompute when creating the handler
+data SearchEnv = SearchEnv
+  { searchEnvGraph :: FunGraph.Graph ST.RealWorld
+  , searchEnvVertexLookup :: T.Text -> Maybe FunGraph.FullyQualifiedType
+  }
+
+createSearchEnv
+  :: FunGraph.Graph ST.RealWorld
+  -> IO SearchEnv
+createSearchEnv graph = do
+  vertices <- ST.stToIO $ DG.vertexLabels graph
+  let hm = HM.fromList $ map (\fqt -> (FunGraph.renderFullyQualifiedType fqt, fqt)) vertices
+  pure $ SearchEnv
+    { searchEnvGraph = graph
+    , searchEnvVertexLookup = (`HM.lookup` hm)
+    }
+
+handler :: SearchEnv -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
+handler searchEnv (Just src) (Just dst) mMaxCount =
   let defaultLimit = 100 -- TODO: add as HTML input field
-  in page graph src dst (fromMaybe defaultLimit mMaxCount)
+  in page searchEnv src dst (fromMaybe defaultLimit mMaxCount)
 handler _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
-page :: FunGraph.FrozenGraph -> T.Text -> T.Text -> Word -> Handler (Html ())
-page graph src dst maxCount = do
-  resultGraphE <- liftIO renderResultGraphIO
+page :: SearchEnv -> T.Text -> T.Text -> Word -> Handler (Html ())
+page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
+  src <- lookupVertexM srcTxt
+  dst <- lookupVertexM dstTxt
+  resultGraphE <- liftIO $ renderResultGraphIO (src, dst)
+  results <- liftIO $ ST.stToIO $ getResults (src, dst)
   pure $ do
     table_ $ do
       thead_ $
@@ -46,32 +70,39 @@ page graph src dst maxCount = do
             td_ $
               mconcat $
                 intersperse ", " $
-                  map (mono . toHtml . TE.decodeUtf8) $
-                    nubOrd $
-                      map FunGraph.functionPackageNoVersion result
+                  map mkPackageLink (nubOrd $ map FunGraph._function_package result)
     h2_ "Result graph"
     either
       (const $ plain "Failed to render result graph")
       toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
       resultGraphE
   where
-    srcDst = -- WIP: doesn't work, cf. 'textToFullyQualifiedType'
-      (FunGraph.textToFullyQualifiedType src, FunGraph.textToFullyQualifiedType dst)
+    mkPackageLink fnPkg =
+      a_
+        [href_ $ "https://hackage.haskell.org/package/" <> FunGraph.renderFgPackage fnPkg]
+        (mono $ toHtml $ FunGraph.fgPackageName fnPkg)
 
-    results =
-      take (fromIntegral maxCount) $
-        FunGraph.queryResultTreeToPaths srcDst query
+    lookupVertexM txt =
+      maybe
+        (throwError $ err404 { errBody = "Type not found: " <> TLE.encodeUtf8 (LT.fromStrict txt) })
+        pure
+        (lookupVertex txt)
 
-    renderResultGraphIO =
-      ST.stToIO resultDotGraph
+    getResults srcDst =
+      take (fromIntegral maxCount) .
+        FunGraph.queryResultTreeToPaths srcDst <$> query srcDst
+
+    renderResultGraphIO srcDst =
+      ST.stToIO (resultDotGraph srcDst)
         >>= Server.GraphViz.renderDotGraph
 
-    resultDotGraph =
-      Util.graphFromQueryResult query
+    resultDotGraph srcDst =
+      query srcDst
+        >>= Util.graphFromQueryResult
         >>= Util.graphToDot ""
 
-    query =
-      FunGraph.runQueryTree -- TODO: use 'runQueryTreeST' to avoid 'thaw' on every request
+    query srcDst =
+      FunGraph.runQueryTree
         (fromIntegral maxCount)
         srcDst
         graph
