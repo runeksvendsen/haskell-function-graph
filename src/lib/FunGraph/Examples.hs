@@ -3,7 +3,6 @@
 module FunGraph.Examples where
 
 import FunGraph
-import FunGraph.Types
 
 all :: [(FullyQualifiedType, String)]
 all =

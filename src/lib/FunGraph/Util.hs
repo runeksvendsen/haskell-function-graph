@@ -24,8 +24,6 @@ import qualified Data.Set as Set
 import qualified Lucid
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
-import qualified Types
-import GHC.Stack (HasCallStack)
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes

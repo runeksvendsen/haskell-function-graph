@@ -32,7 +32,6 @@ import Data.Hashable (Hashable, hashWithSalt)
 import GHC.Generics (Generic)
 import qualified Data.Map as Map
 import Data.Functor ((<&>))
-import Data.String (IsString)
 import Data.List (intersperse)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
