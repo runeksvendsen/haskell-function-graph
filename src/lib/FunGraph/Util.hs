@@ -64,12 +64,12 @@ graphToDot name =
   let bsToLT = LT.fromStrict . TE.decodeUtf8
       -- use 'lucid' to escape what needs escaping
       htmlString html = DG.DotString_Raw $ "< " <> Lucid.renderText html <> " >"
-      vertexAttributes txt = Map.fromList
+      vertexAttributes fqt = Map.fromList
         [ ( "label"
-          ,  htmlString (Lucid.b_ $ Lucid.toHtml txt)
+          ,  htmlString (Lucid.b_ $ Lucid.toHtml $ renderFullyQualifiedTypeNoPackage fqt)
           )
         , ( "tooltip"
-          , DG.DotString_DoubleQuoted txt
+          , DG.DotString_DoubleQuoted $ LT.fromStrict . renderFullyQualifiedType $ fqt
           )
         ]
 
@@ -83,7 +83,7 @@ graphToDot name =
         ]
 
   in DG.graphToDotMulti
-    (vertexAttributes . LT.fromStrict . renderFullyQualifiedType)
+    vertexAttributes
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
 
