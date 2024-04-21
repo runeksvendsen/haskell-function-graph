@@ -76,6 +76,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
       (const $ plain "Failed to render result graph")
       toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
       resultGraphE
+    openSvgInNewWindowBtn
   where
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
     noResultsText (src, dst) =
@@ -139,3 +140,22 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
 
 plain :: Monad m => T.Text -> HtmlT m ()
 plain = toHtml
+
+openSvgInNewWindowBtn :: Html ()
+openSvgInNewWindowBtn = do
+  button_ [id_ btnId] "Open graph in new window"
+  -- Source: https://stackoverflow.com/a/64512427/700597
+  toHtmlRaw $ T.unlines
+    [ "<script>"
+    , " document.getElementById(\"" <> btnId <> "\").onclick = (evt) => {"
+    , "  const svg = document.querySelector(\"svg\");"
+    , "  const as_text = new XMLSerializer().serializeToString(svg);"
+    , "  const blob = new Blob([as_text], { type: \"image/svg+xml\" });"
+    , "  const url = URL.createObjectURL(blob);"
+    , "  const win = open(url);"
+    , "  win.onload = (evt) => URL.revokeObjectURL(url);"
+    , " };"
+    , "</script>"
+    ]
+  where
+    btnId = "open_svg_in_new_window"
