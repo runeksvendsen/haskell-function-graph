@@ -57,7 +57,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
   dst <- lookupVertexM dstTxt
   resultGraphE <- liftIO $ renderResultGraphIO (src, dst)
   results <- liftIO $ ST.stToIO $ getResults (src, dst)
-  pure $ do
+  pure $ if null results then noResultsText (src, dst) else do
     table_ $ do
       thead_ $
         tr_ $ do
@@ -77,6 +77,16 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
       toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
       resultGraphE
   where
+    noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
+    noResultsText (src, dst) =
+      p_ [style_ "color:red"] $ mconcat
+        [ "No results found. No path from "
+        , mono $ toHtml $ FunGraph.renderFullyQualifiedType src
+        , " to "
+        , mono $ toHtml $ FunGraph.renderFullyQualifiedType dst
+        , "."
+        ]
+
     mkPackageLink fnPkg =
       a_
         [href_ $ "https://hackage.haskell.org/package/" <> FunGraph.renderFgPackage fnPkg]
