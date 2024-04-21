@@ -47,7 +47,7 @@ mkPrioTrie mLimit graph = do
     mapM (traverse (lookupVertexId graph) . swap) (Map.toList countMap)
   let mTypeaheadData :: Maybe (NE.NonEmpty (BS.ByteString, (Word, FunGraph.FullyQualifiedType)))
       mTypeaheadData = NE.nonEmpty $ countList <&> \(count, fqt) ->
-        (TE.encodeUtf8 $ FunGraph.renderFullyQualifiedTypeUnqualified fqt, (count, fqt)) -- TODO: use Text
+        (TE.encodeUtf8 $ FunGraph.renderFullyQualifiedTypeUnqualified fqt, (count, fqt))
   forM mTypeaheadData $ \typeaheadData ->
   -- typeaheadData <- maybe (fail "Empty graph in Typeahead handler") pure mTypeaheadData
     Ex.evaluate $ Control.DeepSeq.force $

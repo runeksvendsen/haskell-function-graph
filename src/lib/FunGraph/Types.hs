@@ -117,7 +117,8 @@ parseFunction bs = do
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped identifier.
 --
---   TODO: only works for "simple" types, e.g. NOT types of the form @A B@, @(A, B)@ or @[A]@.
+--   NOTE: Not meant for parsing /types/ (e.g. "text-2.0.2:Data.Text.Internal.Text"),
+--   since they can be arbitrarily nested (e.g. "base-4.18.0.0:GHC.Maybe.Maybe ghc-prim-0.10.0:GHC.Types.Bool").
 parseIdentifier
   :: T.Text
   -> Either String (T.Text, T.Text, Types.FgPackage T.Text)
@@ -137,20 +138,12 @@ type UntypedFunction = Function ()
 newtype PrettyTypedFunction = PrettyTypedFunction { unPrettyTypedFunction :: TypedFunction }
   deriving (Eq, Ord)
 
--- TODO: inlined here. use from 'dump-decls'.
-renderFgPackage
-  :: (Data.String.IsString text, Semigroup text)
-  => Types.FgPackage text
-  -> text
-renderFgPackage p =
-  Types.fgPackageName p <> "-" <> Types.fgPackageVersion p
-
 instance Show PrettyTypedFunction where
   show = prettyFunction . unPrettyTypedFunction
     where
       prettyFunction fun =
         T.unpack $ T.concat $
-          [ renderFgPackage $ _function_package fun
+          [ Types.renderFgPackage $ _function_package fun
           , ":"
           , _function_module fun
           , "."
@@ -161,7 +154,6 @@ instance Show PrettyTypedFunction where
                 ret = unFullyQualifiedType $ Json.functionType_ret sig
             in [" :: ", Types.renderFgTypeFgTyConQualified arg, " -> ", Types.renderFgTypeFgTyConQualified ret]
 
--- TODO: temporary wrapper
 newtype FullyQualifiedType = FullyQualifiedType
   { unFullyQualifiedType :: Types.FgType (Types.FgTyCon T.Text) }
   deriving (Eq, Ord, Show, Generic, NFData)
@@ -193,7 +185,6 @@ fullyQualifiedTypeToText =
 instance Hashable FullyQualifiedType where
   hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
 
--- WIP
 instance Hashable (Types.FgType (Types.FgTyCon T.Text)) where
   hashWithSalt = Data.Hashable.Generic.genericHashWithSalt
 

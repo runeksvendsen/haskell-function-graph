@@ -72,7 +72,7 @@ functionWeight (src, dst) function
   | otherwise = 1
   where
     fnPkg = NE.singleton $ _function_package function
-    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst) -- TODO: 'fqtPackage' is broken
+    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
 
 -- | Run 'runQueryAllST'
 runQueryAll
