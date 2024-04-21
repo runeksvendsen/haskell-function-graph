@@ -22,6 +22,7 @@ module FunGraph.Types
   , declarationMapJsonToFunctions
   , parsePprTyConSingleton
   -- * Re-exports
+  , Types.FgPackage
   , Types.fgPackageName, Types.renderFgPackage
   ) where
 
