@@ -14,8 +14,8 @@ module FunGraph.Types
   , renderComposedFunctions
   , renderComposedFunctionsStr
   , parseComposedFunctions
-  , renderFunction
-  , renderTypedFunction
+  , renderFunction, renderFunctionNoPackage
+  , typedFunctionFromToTypes
   , parseIdentifier, parseFunction
   , fqtPackage
   , fullyQualifiedTypeToText
@@ -95,17 +95,19 @@ parseComposedFunctions txt = do
 -- | Produce e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
 renderFunction :: Function typeSig -> T.Text
 renderFunction fn =
-  Types.renderFgPackage (_function_package fn) <> ":" <> _function_module fn <> "." <> _function_name fn
+  Types.renderFgPackage (_function_package fn) <> ":" <> renderFunctionNoPackage fn
 
--- | Render a function's name (output of 'renderFunction') and its FROM and TO type.
-renderTypedFunction
+-- | Produce e.g. "Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
+renderFunctionNoPackage :: Function typeSig -> T.Text
+renderFunctionNoPackage fn =
+  _function_module fn <> "." <> _function_name fn
+
+typedFunctionFromToTypes
   :: TypedFunction
-  -> (T.Text, (FullyQualifiedType, FullyQualifiedType))
-  -- ^ (output of 'renderFunction', (FROM type, TO type))
-renderTypedFunction fn =
-  ( renderFunction fn
-  , (Json.functionType_arg sig, Json.functionType_ret sig)
-  )
+  -> (FullyQualifiedType, FullyQualifiedType)
+  -- ^ (FROM type, TO type)
+typedFunctionFromToTypes fn =
+  (Json.functionType_arg sig, Json.functionType_ret sig)
   where
     sig = _function_typeSig fn
 

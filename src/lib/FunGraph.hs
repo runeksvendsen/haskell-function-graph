@@ -14,7 +14,7 @@ module FunGraph
   , queryResultTreeToPaths
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
-  , renderFunction, parseFunction, renderTypedFunction
+  , renderFunction, parseFunction
     -- * Types
   , Function(..), TypedFunction, UntypedFunction, PrettyTypedFunction, functionPackageNoVersion, renderFunctionPackage
   , FullyQualifiedType, renderFullyQualifiedType, fullyQualifiedTypeToText

@@ -120,16 +120,17 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
 
     renderResult :: [FunGraph.TypedFunction] -> Html ()
     renderResult fns =
-      let nameWithTypeLst = map FunGraph.renderTypedFunction (reverse fns)
-          renderSingleFn (name, (fromTy, toTy)) =
-            let typeSig = T.unwords $
-                  [ "::"
+      let renderSingleFn fn =
+            let (fromTy, toTy) = FunGraph.typedFunctionFromToTypes fn
+                typeSig = T.unwords
+                  [ FunGraph.renderFunction fn
+                  , "::"
                   , FunGraph.fullyQualifiedTypeToText fromTy
                   , "->"
                   , FunGraph.fullyQualifiedTypeToText toTy
                   ]
-            in mono (toHtml name) `with` [title_ typeSig]
-      in mconcat $ intersperse (mono " . ") $ map renderSingleFn nameWithTypeLst
+            in mono (toHtml $ FunGraph.renderFunctionNoPackage fn) `with` [title_ typeSig]
+      in mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
 
     mono =
       let style = style_ $ T.intercalate "; " $
