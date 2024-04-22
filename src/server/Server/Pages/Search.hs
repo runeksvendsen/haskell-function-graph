@@ -103,6 +103,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
       take (fromIntegral maxCount) .
         FunGraph.queryResultTreeToPaths srcDst <$> query srcDst
 
+    -- TODO: link nodes/types to Hackage SrcLoc (e.g. https://hackage.haskell.org/package/fast-logger-3.2.2/docs/src/System.Log.FastLogger.LogStr.html#LogStr)
+    -- TODO: link edges/functions to Hackage docs (e.g. https://hackage.haskell.org/package/text-2.0.2/docs/Data-Text-Encoding.html#v:decodeASCII-39-)
     renderResultGraphIO srcDst =
       ST.stToIO (resultDotGraph srcDst)
         >>= Server.GraphViz.renderDotGraph
@@ -129,6 +131,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
                   , "->"
                   , FunGraph.fullyQualifiedTypeToText toTy
                   ]
+            -- TODO: link function name to Hackage docs (e.g. https://hackage.haskell.org/package/text-2.0.2/docs/Data-Text-Encoding.html#v:decodeASCII-39-)
             in mono (toHtml $ FunGraph.renderFunctionNoPackage fn) `with` [title_ typeSig]
       in mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
 
