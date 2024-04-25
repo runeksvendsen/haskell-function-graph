@@ -114,6 +114,8 @@ renderFunctionNoPackage fn =
 --
 -- >>> functionToHackageDocsUrl $ Function "unpackCString#" "Data.Text" (Types.FgPackage "text" "1.2.4.1") ()
 -- "https://hackage.haskell.org/package/text-1.2.4.1/docs/Data-Text.html#v:unpackCString-35-"
+--
+-- TODO: Fix bad link for re-exported modules. E.g. for "base-compat-0.13.0:Data-List-Compat.unlines" where Data.List.Compat re-exports all of Data.List so the link https://hackage.haskell.org/package/base-compat-0.13.0/docs/Data-List-Compat.html#v:unlines does not show "unlines" but only "module Data.List".
 functionToHackageDocsUrl :: Function typeSig -> T.Text
 functionToHackageDocsUrl fn = mconcat
   [ "https://hackage.haskell.org/package/"
