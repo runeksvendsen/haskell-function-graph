@@ -128,7 +128,7 @@ functionToHackageDocsUrl fn = mconcat
     escapeIdentifier =
       T.foldl'
         (\txt c -> txt <>
-            if c `elem` (['a'..'z'] ++ ['A'..'Z'])
+            if c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
               then T.singleton c
               else T.pack $ "-" <> show (fromEnum c) <> "-"
         )
