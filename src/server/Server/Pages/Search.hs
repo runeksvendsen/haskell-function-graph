@@ -94,7 +94,9 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
 
     mkPackageLink fnPkg =
       a_
-        [href_ $ "https://hackage.haskell.org/package/" <> FunGraph.renderFgPackage fnPkg]
+        [ href_ $ "https://hackage.haskell.org/package/" <> FunGraph.renderFgPackage fnPkg
+        , target_ "_blank"
+        ]
         (mono $ toHtml $ FunGraph.fgPackageName fnPkg)
 
     lookupVertexM txt =
