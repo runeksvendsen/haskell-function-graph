@@ -14,6 +14,7 @@ import qualified Data.Text.Lazy.Encoding
 import qualified Data.ByteString.Char8
 import Data.Bifunctor (first)
 import qualified System.IO
+import qualified FunGraph.Util
 
 dotExe :: FilePath
 dotExe = "dot"
@@ -49,10 +50,9 @@ runDotExe args stdin = do
 --   Run when starting server to exit early in case of missing runtime dependencies.
 healthCheck :: IO ()
 healthCheck = do
-  putStr $ "Checking if '" <> dotExe <> "' executable can be executed... "
-  System.IO.hFlush System.IO.stdout
+  FunGraph.Util.putStrFlush $ "Checking if '" <> dotExe <> "' executable can be executed... "
   runDotExe ["-V"] "" >>= either handleError (const $ pure ())
-  putStrLn $ "success"
+  putStrLn "success"
   where
     handleError errStr = do
       putStrLn $ "FAIL. Is the executable '" <> dotExe <> "' on the PATH?"

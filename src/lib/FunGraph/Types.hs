@@ -9,12 +9,12 @@ module FunGraph.Types
   , TypedFunction
   , UntypedFunction
   , PrettyTypedFunction(..)
-  , FullyQualifiedType, renderFullyQualifiedType, renderFullyQualifiedTypeUnqualified, renderFullyQualifiedTypeNoPackage
+  , FullyQualifiedType, renderFullyQualifiedType, renderFullyQualifiedTypeUnqualified, renderFullyQualifiedTypeNoPackage, renderFullyQualifiedTypeGeneric
   , functionPackageNoVersion, renderFunctionPackage
   , renderComposedFunctions
   , renderComposedFunctionsStr
   , parseComposedFunctions
-  , renderFunction, renderFunctionNoPackage
+  , renderFunction, renderFunctionNoPackage, functionToHackageDocsUrl
   , typedFunctionFromToTypes
   , parseIdentifier, parseFunction
   , fqtPackage
@@ -102,6 +102,38 @@ renderFunctionNoPackage :: Function typeSig -> T.Text
 renderFunctionNoPackage fn =
   _function_module fn <> "." <> _function_name fn
 
+-- | Render as URL to Hackage documentation.
+--
+-- Examples:
+--
+-- >>> functionToHackageDocsUrl $ Function "pack" "Data.Text" (Types.FgPackage "text" "1.2.4.1") ()
+-- "https://hackage.haskell.org/package/text-1.2.4.1/docs/Data-Text.html#v:pack"
+--
+-- >>> functionToHackageDocsUrl $ Function "foldl'" "Data.Text" (Types.FgPackage "text" "1.2.4.1") ()
+-- "https://hackage.haskell.org/package/text-1.2.4.1/docs/Data-Text.html#v:foldl-39-"
+--
+-- >>> functionToHackageDocsUrl $ Function "unpackCString#" "Data.Text" (Types.FgPackage "text" "1.2.4.1") ()
+-- "https://hackage.haskell.org/package/text-1.2.4.1/docs/Data-Text.html#v:unpackCString-35-"
+functionToHackageDocsUrl :: Function typeSig -> T.Text
+functionToHackageDocsUrl fn = mconcat
+  [ "https://hackage.haskell.org/package/"
+  , Types.renderFgPackage (_function_package fn)
+  , "/docs/"
+  , T.replace "." "-" $ _function_module fn
+  , ".html#v:"
+  , escapeIdentifier $ _function_name fn
+  ]
+  where
+    -- Convert non-letters into ASCII character code surrounded by "-"
+    escapeIdentifier =
+      T.foldl'
+        (\txt c -> txt <>
+            if c `elem` (['a'..'z'] ++ ['A'..'Z'])
+              then T.singleton c
+              else T.pack $ "-" <> show (fromEnum c) <> "-"
+        )
+        ""
+
 typedFunctionFromToTypes
   :: TypedFunction
   -> (FullyQualifiedType, FullyQualifiedType)
@@ -168,6 +200,15 @@ renderFullyQualifiedTypeUnqualified = Types.renderFgTypeFgTyConUnqualified . unF
 
 renderFullyQualifiedTypeNoPackage :: FullyQualifiedType -> T.Text
 renderFullyQualifiedTypeNoPackage = Types.renderFgTypeFgTyConQualifiedNoPackage . unFullyQualifiedType
+
+renderFullyQualifiedTypeGeneric
+  :: Monoid a
+  => (T.Text -> a)
+  -> (Types.FgTyCon T.Text -> a)
+  -> FullyQualifiedType
+  -> a
+renderFullyQualifiedTypeGeneric mkLiteral renderTycon =
+  Types.renderFgTypeGeneric mkLiteral renderTycon . unFullyQualifiedType
 
 fqtPackage :: FullyQualifiedType -> NE.NonEmpty (Types.FgPackage T.Text)
 fqtPackage fqt =

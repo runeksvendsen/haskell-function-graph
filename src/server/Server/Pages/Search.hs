@@ -56,6 +56,10 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
   resultGraphE <- liftIO $ renderResultGraphIO (src, dst)
+  either
+    (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
+    (const $ pure ())
+    resultGraphE
   results <- liftIO $ ST.stToIO $ getResults (src, dst)
   pure $ if null results then noResultsText (src, dst) else do
     table_ $ do
