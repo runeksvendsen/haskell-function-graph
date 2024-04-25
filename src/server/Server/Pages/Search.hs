@@ -135,8 +135,11 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
                   , "->"
                   , FunGraph.fullyQualifiedTypeToText toTy
                   ]
-            -- TODO: link function name to Hackage docs (e.g. https://hackage.haskell.org/package/text-2.0.2/docs/Data-Text-Encoding.html#v:decodeASCII-39-)
-            in mono (toHtml $ FunGraph.renderFunctionNoPackage fn) `with` [title_ typeSig]
+                functionNameWithLink :: Html ()
+                functionNameWithLink = a_
+                  [href_ $ FunGraph.functionToHackageDocsUrl fn, target_ "_blank"]
+                  (mono $ toHtml $ FunGraph.renderFunctionNoPackage fn)
+            in functionNameWithLink `with` [title_ typeSig]
       in mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
 
     mono =
