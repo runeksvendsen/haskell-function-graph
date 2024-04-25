@@ -210,14 +210,18 @@ renderFullyQualifiedTypeGeneric
 renderFullyQualifiedTypeGeneric mkLiteral renderTycon =
   Types.renderFgTypeGeneric mkLiteral renderTycon . unFullyQualifiedType
 
-fqtPackage :: FullyQualifiedType -> NE.NonEmpty (Types.FgPackage T.Text)
-fqtPackage fqt =
-  fromMaybe (error $ "fqtPackage: empty list: " <> show fqt)
-    . NE.nonEmpty
-    . map Types.fgTyConPackage
-    . foldr (:) []
-    . unFullyQualifiedType
-    $ fqt
+-- | One package for each type constructor in the 'FullyQualifiedType'.
+--   Note that the type constructors for: list, tuples and unit are ignored.
+--
+--   This means e.g. the empty list is returned in case of unit and in case of
+--   @[Char]@ only the @Char@ package is returned.
+fqtPackage
+  :: FullyQualifiedType
+  -> [Types.FgPackage T.Text]
+fqtPackage =
+    map Types.fgTyConPackage
+  . foldr (:) []
+  . unFullyQualifiedType
 
 fullyQualifiedTypeToText
   :: FullyQualifiedType

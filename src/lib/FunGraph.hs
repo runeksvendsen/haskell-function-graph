@@ -71,8 +71,9 @@ functionWeight (src, dst) function
   | srcPkg == fnPkg || dstPkg == fnPkg = 0.5
   | otherwise = 1
   where
-    fnPkg = NE.singleton $ _function_package function
+    fnPkg = [_function_package function]
     (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
+    -- TODO: 'fqtPackage' ignores the package of the type constructors for list, tuples and unit. So e.g. both "[Char]" and "Char" will return only the package for "Char".
 
 -- | Run 'runQueryAllST'
 runQueryAll
