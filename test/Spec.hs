@@ -67,7 +67,7 @@ main = withTraceArg $ \shouldTrace -> FunGraph.withGraphFromFile FunGraph.defaul
       Hspec.evaluateSummary summary
 
     traceResults :: [(FunGraph.Test.PPFunctions, Double)] -> [(FunGraph.Test.PPFunctions, Double)]
-    traceResults results =
+    traceResults results = if null results then results else -- make `traceResults []` a no-op
         trace (unlines $ "" : map (\(path, weight) -> show weight <> ": " <> show path) results) results
 
 isSupersetOf :: (Show a, Ord a) => Set.Set a -> Set.Set a -> IO ()
