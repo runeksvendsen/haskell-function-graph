@@ -28,7 +28,30 @@ testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
 
 main :: IO ()
-main = withTraceArg $ \shouldTrace -> FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
+main =
+  withTraceArg $ \shouldTrace ->
+    FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
+      spec <- main' shouldTrace graph
+      runHspecWithTraceTip shouldTrace spec
+  where
+    traceCLIArg :: String
+    traceCLIArg = "--trace"
+
+    withTraceArg ioa =
+      withExtraArgs [(traceCLIArg, "print tracing information")] $ \args ->
+        ioa (args == [traceCLIArg])
+
+    runHspecWithTraceTip shouldTrace spec = do
+      summary <- Hspec.hspecResult spec
+      when (not (Hspec.isSuccess summary) && not shouldTrace) $
+        putStrLn $ "\nTest suite had failures. Run again with the " <> traceCLIArg <> " argument to print tracing information."
+      Hspec.evaluateSummary summary
+
+main'
+  :: Bool
+  -> FunGraph.Graph ST.RealWorld
+  -> IO Hspec.Spec
+main' shouldTrace graph = do
   graphEdgeSet <- ST.stToIO (DG.toEdges graph)
   let graphEdges = Set.map void $ Set.fromList $ concat $ Set.map (NE.toList . DG.eMeta) graphEdgeSet
   let testCase test =
@@ -40,31 +63,17 @@ main = withTraceArg $ \shouldTrace -> FunGraph.withGraphFromFile FunGraph.defaul
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
           HSpec.it "contained in top query results" $ do
-            result <- ST.stToIO $ FunGraph.Test.queryTest_runQuery test (mkRunQueryFunction shouldTrace graph)
-            Set.fromList (map fst $ mkTraceFunction shouldTrace result)
+            result <- ST.stToIO $ FunGraph.Test.queryTest_runQuery test (runQueryFunction graph)
+            Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 FunGraph.Test.queryTest_expectedResult test
-  runHspecWithTraceTip shouldTrace $
-    HSpec.describe "Unit tests" $ do
-      HSpec.describe "Expected result" $
-        forM_ FunGraph.Test.allTestCases testCase
+  pure $ HSpec.describe "Unit tests" $ do
+    HSpec.describe "Expected result" $
+      forM_ FunGraph.Test.allTestCases testCase
   where
-    traceCLIArg :: String
-    traceCLIArg = "--trace"
+    traceFunction = if shouldTrace then traceResults else id
 
-    withTraceArg ioa =
-      withExtraArgs [(traceCLIArg, "print tracing information")] $ \args ->
-        ioa (args == [traceCLIArg])
-
-    mkTraceFunction shouldTrace = if shouldTrace then traceResults else id
-
-    mkRunQueryFunction shouldTrace = if shouldTrace then FunGraph.runQueryTrace else FunGraph.runQuery
-
-    runHspecWithTraceTip shouldTrace spec = do
-      summary <- Hspec.hspecResult spec
-      when (not (Hspec.isSuccess summary) && not shouldTrace) $
-        putStrLn $ "\nTest suite had failures. Run again with the " <> traceCLIArg <> " argument to print tracing information."
-      Hspec.evaluateSummary summary
+    runQueryFunction = if shouldTrace then FunGraph.runQueryTrace else FunGraph.runQuery
 
     traceResults :: [(FunGraph.Test.PPFunctions, Double)] -> [(FunGraph.Test.PPFunctions, Double)]
     traceResults results = if null results then results else -- make `traceResults []` a no-op
