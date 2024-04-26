@@ -126,11 +126,11 @@ functionToHackageDocsUrl fn = mconcat
   , escapeIdentifier $ _function_name fn
   ]
   where
-    -- Convert non-letters into ASCII character code surrounded by "-"
+    -- Convert symbols (TODO: which exactly?) into ASCII character code surrounded by "-"
     escapeIdentifier =
       T.foldl'
         (\txt c -> txt <>
-            if c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
+            if c `elem` ('_' : ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
               then T.singleton c
               else T.pack $ "-" <> show (fromEnum c) <> "-"
         )
