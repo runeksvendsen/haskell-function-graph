@@ -174,7 +174,7 @@ openSvgInNewWindowBtn = do
   toHtmlRaw $ T.unlines
     [ "<script>"
     , " // make button visible in case JS is enabled"
-    , " const btnElem = document.getElementById(\"" <> btnId <> "\");"
+    , " var btnElem = document.getElementById(\"" <> btnId <> "\");"
     , " btnElem.style.display = \"block\";"
     , " btnElem.style.visibility = \"visible\";"
     , " // open SVG in new window on click"
