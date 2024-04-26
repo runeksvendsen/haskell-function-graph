@@ -4,7 +4,7 @@
 
 module Server.Pages.Search
 ( page
-, handler
+, handler, HandlerType
 , SearchEnv, createSearchEnv
 )
 where
@@ -26,6 +26,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as TLE
+import Server.Api (HxBoosted)
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -44,11 +45,19 @@ createSearchEnv graph = do
     , searchEnvVertexLookup = (`HM.lookup` hm)
     }
 
-handler :: SearchEnv -> Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())
-handler searchEnv (Just src) (Just dst) mMaxCount =
+-- ^ /Search/ handler type
+type HandlerType
+  =  Maybe HxBoosted -- ^ 'HX-Boosted' header. 'Just' if present and 'Nothing' if not present.
+  -> Maybe T.Text -- ^ src
+  -> Maybe T.Text -- ^ dst
+  -> Maybe Word -- ^ max number of results
+  -> Handler (Html ())
+handler :: SearchEnv -> HandlerType
+handler searchEnv _ (Just src) (Just dst) mMaxCount =
   let defaultLimit = 100 -- TODO: add as HTML input field
-  in page searchEnv src dst (fromMaybe defaultLimit mMaxCount)
-handler _ _ _ _ =
+  in do
+    page searchEnv src dst (fromMaybe defaultLimit mMaxCount)
+handler _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
 page :: SearchEnv -> T.Text -> T.Text -> Word -> Handler (Html ())
@@ -156,11 +165,20 @@ plain = toHtml
 
 openSvgInNewWindowBtn :: Html ()
 openSvgInNewWindowBtn = do
-  button_ [id_ btnId] "Open graph in new window"
+  button_
+    [ id_ btnId
+    , style_ "visibility:hidden; display:none;" -- Hide the button if JS is disabled
+    ]
+    "Open graph in new window"
   -- Source: https://stackoverflow.com/a/64512427/700597
   toHtmlRaw $ T.unlines
     [ "<script>"
-    , " document.getElementById(\"" <> btnId <> "\").onclick = (evt) => {"
+    , " // make button visible in case JS is enabled"
+    , " const btnElem = document.getElementById(\"" <> btnId <> "\");"
+    , " btnElem.style.display = \"block\";"
+    , " btnElem.style.visibility = \"visible\";"
+    , " // open SVG in new window on click"
+    , " btnElem.onclick = (evt) => {"
     , "  const svg = document.querySelector(\"svg\");"
     , "  const as_text = new XMLSerializer().serializeToString(svg);"
     , "  const blob = new Blob([as_text], { type: \"image/svg+xml\" });"

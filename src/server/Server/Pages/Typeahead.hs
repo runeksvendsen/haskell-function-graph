@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Server.Pages.Typeahead
-( mkHandler
+( mkHandler, HandlerType
 )
 where
 
@@ -25,12 +25,16 @@ import qualified Control.Monad.ST as ST
 import qualified Data.Set as Set
 import qualified Data.Foldable
 
+-- ^ /Typeahead/ handler type
+type HandlerType
+  =  Maybe T.Text
+  -> Maybe T.Text
+  -> Handler (Html ())
+
 mkHandler
   :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
   -> FunGraph.Graph ST.RealWorld
-  -> IO ( Maybe T.Text -> Maybe T.Text -> Handler (Html ())
-        , Html ()
-        ) -- ^ (handler, initial suggestions)
+  -> IO ( HandlerType, Html ()) -- ^ (handler, initial suggestions)
 mkHandler mLimit graph = do
   mPrioTrie <- mkPrioTrie mLimit graph
   prioTrie <- maybe (fail "empty input graph in Typeahead handler") pure mPrioTrie

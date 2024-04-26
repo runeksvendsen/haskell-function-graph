@@ -16,7 +16,6 @@ import qualified Data.Text as T
 import qualified Server.GraphViz
 import qualified Network.Wai.Middleware.Servant.Errors as Errors
 import qualified Network.Wai.Middleware.RequestLogger as RL
-import qualified System.IO
 import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified FunGraph.Util
@@ -45,10 +44,18 @@ mkHandlers
 mkHandlers appendToHead graph = do
   (typeaheadHandler, initalSuggestions) <-
     Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) graph
+  let mkRootHandler = Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions
   searchEnv <- Server.Pages.Search.createSearchEnv graph
   pure $ Handlers
-        (Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions)
-        (Server.Pages.Search.handler searchEnv)
+        (mkRootHandler ("", (Nothing, Nothing)))
+        (\mHxBoosted mSrc mDst mMaxCount -> do
+            let runSearchHandler = Server.Pages.Search.handler searchEnv mHxBoosted mSrc mDst mMaxCount
+            case mHxBoosted of
+              Just HxBoosted -> runSearchHandler
+              Nothing -> do
+                searchResult <- runSearchHandler
+                pure $ mkRootHandler (searchResult, (mSrc, mDst))
+        )
         typeaheadHandler
   where
     typeaheadCountLimit = 25
@@ -77,9 +84,9 @@ mkHandlers appendToHead graph = do
       ]
 
 data Handlers = Handlers
-  !(Html ()) -- ^ Root handler
-  !(Maybe T.Text -> Maybe T.Text -> Maybe Word -> Handler (Html ())) -- ^ Search handler
-  !(Maybe T.Text -> Maybe T.Text -> Handler (Html ()))
+  !Server.Pages.Root.HandlerType
+  !Server.Pages.Search.HandlerType
+  !Server.Pages.Typeahead.HandlerType
 
 app :: Handlers -> Application
 app (Handlers rootHandler searchHandler typeaheadHandler) =
