@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 module Server.Pages.Search
 ( page
@@ -51,8 +52,15 @@ type HandlerType
   -> Maybe T.Text -- ^ src
   -> Maybe T.Text -- ^ dst
   -> Maybe Word -- ^ max number of results
-  -> Handler (Html ())
-handler :: SearchEnv -> HandlerType
+  -> Handler (Html ()) -- ^ (html, (src, dst))
+
+handler
+  :: SearchEnv
+  -> Maybe HxBoosted -- ^ 'HX-Boosted' header. 'Just' if present and 'Nothing' if not present.
+  -> Maybe T.Text -- ^ src
+  -> Maybe T.Text -- ^ dst
+  -> Maybe Word -- ^ max number of results
+  -> Handler (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
 handler searchEnv _ (Just src) (Just dst) mMaxCount =
   let defaultLimit = 100 -- TODO: add as HTML input field
   in do
@@ -60,7 +68,12 @@ handler searchEnv _ (Just src) (Just dst) mMaxCount =
 handler _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
-page :: SearchEnv -> T.Text -> T.Text -> Word -> Handler (Html ())
+page
+  :: SearchEnv
+  -> T.Text
+  -> T.Text
+  -> Word
+  -> Handler (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
 page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
@@ -70,7 +83,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
     (const $ pure ())
     resultGraphE
   results <- liftIO $ ST.stToIO $ getResults (src, dst)
-  pure $ if null results then noResultsText (src, dst) else do
+  pure $ (, (src, dst)) $ if null results then noResultsText (src, dst) else do
     table_ $ do
       thead_ $
         tr_ $ do
@@ -84,7 +97,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
               mconcat $
                 intersperse ", " $
                   map mkPackageLink (nubOrd $ map FunGraph._function_package result)
-    h2_ "Result graph"
+    h3_ "Result graph"
     either
       (const $ plain "Failed to render result graph")
       toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped

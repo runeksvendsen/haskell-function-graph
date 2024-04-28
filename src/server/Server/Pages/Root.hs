@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Server.Pages.Root
 ( page
@@ -11,6 +12,8 @@ import Lucid
 import Lucid.Htmx
 import qualified Data.Text as T
 import Data.Maybe (fromMaybe)
+import qualified FunGraph
+import Control.Monad (forM)
 
 type HandlerType = Html ()
 
@@ -19,30 +22,32 @@ page
   -- ^ Append to 'head' element
   -> Html ()
   -- ^ Initial typeahead suggestions (sequence of 'option' elements)
-  -> (Html (), (Maybe T.Text, Maybe T.Text))
+  -> (Html (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
   -- ^ Search result HTML and maybe the entered (src, dst).
   --
   --   If the user pastes a "/search?..." link into the browser then we want to display
   --   the root page with the search results included, as well as "src" and "dst" filled in.
   -> Html ()
-page appendToHead initialSuggestions (searchResult, mSrcDst) = doctypehtml_ $ do
-  head_ $ do
-    title_ "Haskell Function Graph"
-    appendToHead
-  body_ $ do
-    h1_ "Search for compositions of functions"
-    let targetId = "search_result"
-    form targetId initialSuggestions mSrcDst
-    h3_ "Results"
-    div_ [id_ targetId] searchResult
+page appendToHead initialSuggestions (searchResult, mSrcDst) = do
+  doctype_
+  html_ [lang_ "en"] $ do
+    head_ $ do
+      title_ "Haskell Function Graph"
+      appendToHead
+    body_  $ do
+      h1_ "Search for compositions of functions"
+      let targetId = "search_result"
+      form targetId initialSuggestions mSrcDst
+      h3_ "Results"
+      div_ [id_ targetId] searchResult
 
 form
   :: T.Text -- ^ targetId
   -> Html ()  -- ^ Initial suggestions
-  -> (Maybe T.Text, Maybe T.Text) -- ^ Initial values for (src, dst)
+  -> Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -- ^ Initial values for (src, dst)
   -> Html ()
 form targetId initialSuggestions mSrcDst = do
-  h3_ "Search"
+  h2_ "Search"
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
   form_
     [ action_ "/search"
@@ -61,23 +66,23 @@ form targetId initialSuggestions mSrcDst = do
 
 mkTypeaheadInputs
   :: Html ()
-  -> (Maybe T.Text, Maybe T.Text) -- ^ Initial values for (src, dst)
+  -> Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -- ^ Initial values for (src, dst)
   -> Html (Html (), Html ())
-mkTypeaheadInputs initialSuggestions (mSrc, mDst) = do
+mkTypeaheadInputs initialSuggestions mSrcDst = do
   script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
   pure
-    ( mkInput "src" [placeholder_ "FROM type"] mSrc
-    , mkInput "dst" [placeholder_ "TO type"] mDst
+    ( mkInput "src" [] (fst <$> mSrcDst)
+    , mkInput "dst" [] (snd <$> mSrcDst)
     )
   where
     mkInput id' attrs mInitialValue = do
       let inputId = id' <> "_" <> "input"
-      mkSuggestions id' initialSuggestions
+      mkSuggestions id' mInitialValue initialSuggestions
       input_ $ attrs ++
         [ name_ inputId
         , id_ inputId
-        , value_ $ fromMaybe "" mInitialValue
         , type_ "search"
+        , placeholder_ "enter an unqualified type name, e.g. Text, and select the qualified name above"
         , list_ id'
         , hxGet_ "/typeahead" -- TODO: use something type-safe
         , hxTarget_ $ "#" <> id'
@@ -85,6 +90,24 @@ mkTypeaheadInputs initialSuggestions (mSrc, mDst) = do
         , hxPushUrl_ "false"
         ]
 
-mkSuggestions :: T.Text -> Html () -> Html ()
-mkSuggestions id' =
-  select_ [id_ id', name_ id']
+mkSuggestions
+  :: T.Text -- ^ id
+  -> Maybe FunGraph.FullyQualifiedType -- ^ initial value
+  -> Html ()
+  -> Html ()
+mkSuggestions id' mFqt suggestions =
+  select_
+    [ id_ id'
+    , name_ id'
+    , size_ "5"
+    , required_ ""
+    ] $ maybe mempty selectedSuggestion mFqt <> suggestions
+  where
+    selectedSuggestion :: FunGraph.FullyQualifiedType -> Html ()
+    selectedSuggestion fqt =
+      option_
+        [ value_ $ FunGraph.renderFullyQualifiedType fqt
+        , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
+        , selected_ ""
+        ]
+        ""

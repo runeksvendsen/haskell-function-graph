@@ -104,7 +104,7 @@ suggestions prioTrie prefix = do
     forM_ suggestionsLst $ \(_, fqt) ->
       option_
         [ value_ $ FunGraph.renderFullyQualifiedType fqt
-        , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
+        , label_ $ FunGraph.renderFullyQualifiedType fqt
         ]
         ""
   where

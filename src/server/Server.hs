@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- TODO: Find out why this query is so slow (45 seconds): Params: [("src","ghc-9.6.2:GHC.Data.StringBuffer.StringBuffer"),("src_input","String"),("dst","HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate [ghc-prim-0.10.0:GHC.Types.Char]"),("dst_input","String")]
 module Server (main) where
 
 import qualified Server.Pages.Root
@@ -47,14 +48,16 @@ mkHandlers appendToHead graph = do
   let mkRootHandler = Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions
   searchEnv <- Server.Pages.Search.createSearchEnv graph
   pure $ Handlers
-        (mkRootHandler ("", (Nothing, Nothing)))
+        (mkRootHandler ("", Nothing))
         (\mHxBoosted mSrc mDst mMaxCount -> do
             let runSearchHandler = Server.Pages.Search.handler searchEnv mHxBoosted mSrc mDst mMaxCount
             case mHxBoosted of
-              Just HxBoosted -> runSearchHandler
+              Just HxBoosted -> do
+                (searchResult, _) <- runSearchHandler
+                pure searchResult
               Nothing -> do
-                searchResult <- runSearchHandler
-                pure $ mkRootHandler (searchResult, (mSrc, mDst))
+                (searchResult, (src, dst)) <- runSearchHandler
+                pure $ mkRootHandler (searchResult, Just (src, dst))
         )
         typeaheadHandler
   where
