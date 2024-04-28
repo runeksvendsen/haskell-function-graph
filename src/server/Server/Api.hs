@@ -23,8 +23,8 @@ type Search
 
 type Typeahead
   =  "typeahead"
-  :> QueryParam "src" T.Text -- NB: matches input_ "name" in Server.Pages.Root.form
-  :> QueryParam "dst" T.Text -- NB: matches input_ "name" in Server.Pages.Root.form
+  :> QueryParam "src_input" T.Text -- NB: matches input_ "name" in Server.Pages.Root.form
+  :> QueryParam "dst_input" T.Text -- NB: matches input_ "name" in Server.Pages.Root.form
   :> Get '[HTML] (Html ())
 
 -- | Signals that the @HX-Boosted@ HTTP header is set

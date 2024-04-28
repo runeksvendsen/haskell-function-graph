@@ -70,23 +70,21 @@ mkTypeaheadInputs initialSuggestions (mSrc, mDst) = do
     , mkInput "dst" [placeholder_ "TO type"] mDst
     )
   where
-    typeSuggestionsBaseId = "type_suggestions"
-
     mkInput id' attrs mInitialValue = do
-      let typeSuggestionsId = typeSuggestionsBaseId <> "_" <> id'
-      mkSuggestions typeSuggestionsId initialSuggestions
+      let inputId = id' <> "_" <> "input"
+      mkSuggestions id' initialSuggestions
       input_ $ attrs ++
-        [ name_ id'
-        , id_ id'
+        [ name_ inputId
+        , id_ inputId
         , value_ $ fromMaybe "" mInitialValue
         , type_ "search"
-        , list_ typeSuggestionsId
+        , list_ id'
         , hxGet_ "/typeahead" -- TODO: use something type-safe
-        , hxTarget_ $ "#" <> typeSuggestionsId
+        , hxTarget_ $ "#" <> id'
         , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
         , hxPushUrl_ "false"
         ]
 
 mkSuggestions :: T.Text -> Html () -> Html ()
 mkSuggestions id' =
-  datalist_ [id_ id']
+  select_ [id_ id', name_ id']
