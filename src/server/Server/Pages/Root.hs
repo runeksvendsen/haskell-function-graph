@@ -99,7 +99,6 @@ mkSuggestions id' mFqt suggestions =
   select_
     [ id_ id'
     , name_ id'
-    , size_ "5"
     , required_ ""
     ] $ maybe mempty selectedSuggestion mFqt <> suggestions
   where
