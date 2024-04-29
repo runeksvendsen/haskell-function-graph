@@ -20,10 +20,11 @@ module FunGraph.Types
   , fqtPackage
   , fullyQualifiedTypeToText
   , declarationMapJsonToFunctions
-  , parsePprTyConSingleton
+  , parsePprTyConSingleton, parsePprTyConMulti
   -- * Re-exports
   , Types.FgPackage
   , Types.fgPackageName, Types.renderFgPackage
+  , Types.FgType(..)
   ) where
 
 import qualified Json
@@ -263,10 +264,41 @@ instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
   toNode = Json.functionType_ret . _function_typeSig
   metaData = id
 
-
+-- | Parse a type constructor of zero arity, ie. one that is not applied to any type(s).
+--
+-- Examples:
+--
+-- >>> renderFullyQualifiedType $ parsePprTyConSingleton "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
+-- "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString"
+--
+-- >>> renderFullyQualifiedType $ parsePprTyConSingleton "text-2.0.2:Data.Text.Internal.Lazy.Text"
+-- "text-2.0.2:Data.Text.Internal.Lazy.Text"
 parsePprTyConSingleton
   :: HasCallStack
   => T.Text
   -> FullyQualifiedType
 parsePprTyConSingleton txt = FullyQualifiedType $
-  either (error $ "BUG: parsePprTyConSingleton: " <> show txt) id ((`Types.FgType_TyConApp` []) <$> Types.parsePprTyCon txt)
+  either
+    (\err -> error $ "BUG: parsePprTyConSingleton: error parsing " <> show txt <> ". error: " <> err)
+    id
+    ((`Types.FgType_TyConApp` []) <$> Types.parsePprTyCon txt)
+
+-- | Parse a type constructor of arbitrary arity.
+--
+--   The 'Types.FgType' defines the /structure/ of the type (e.g. @A (B C) D@) while
+--   the 'T.Text' defined the actual type constructors (ie. what the types @A@, @B@, @C@ are).
+--
+--  Examples:
+--
+-- >>> :set -XOverloadedStrings
+-- >>> renderFullyQualifiedType $ parsePprTyConMulti $ Types.FgType_TyConApp "base-4.18.0.0:GHC.Maybe.Maybe" [Types.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Bool" []]
+-- "base-4.18.0.0:GHC.Maybe.Maybe ghc-prim-0.10.0:GHC.Types.Bool"
+parsePprTyConMulti
+  :: HasCallStack
+  => Types.FgType T.Text
+  -> FullyQualifiedType
+parsePprTyConMulti fgType = FullyQualifiedType $
+  either
+    (\err -> error $ "BUG: parsePprTyConSingleton: error parsing " <> show fgType <> ". error: " <> err)
+    id
+    (traverse Types.parsePprTyCon fgType)
