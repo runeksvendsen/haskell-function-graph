@@ -2,13 +2,15 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 module FunGraph.Test
 ( allTestCases
 , case1
 , case2
 , case3
 , case4
-, QueryTest(..)
+, QueryTest(..), queryTest_runQuery
 , PPFunctions(..)
 )
 where
@@ -28,13 +30,26 @@ import qualified Data.Text as T
 
 data QueryTest = QueryTest
     { queryTest_name :: String
-    , queryTest_runQuery
+    , queryTest_runQueryFun
         :: forall s v meta.
+           (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
+        => (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
+        -> (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
+        -> ST.ST s [(PPFunctions, Double)]
+    , queryTest_args :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
+    , queryTest_expectedResult :: Set.Set PPFunctions
+    }
+
+-- | Apply 'queryTest_runQueryFun' to 'queryTest_args'
+queryTest_runQuery
+  :: QueryTest
+  -> (forall s v meta.
            (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
         => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
         -> ST.ST s [(PPFunctions, Double)]
-    , queryTest_expectedResult :: Set.Set PPFunctions
-    }
+      )
+queryTest_runQuery qt =
+  queryTest_runQueryFun qt (queryTest_args qt)
 
 mkTestCase
   :: Int
@@ -44,8 +59,9 @@ mkTestCase
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQuery = \runner ->
-            mapQueryResult . take maxCount <$> FunGraph.runQueryAllST runner maxCount (fst from, fst to)
+        , queryTest_runQueryFun = \args runner ->
+            mapQueryResult . take maxCount <$> FunGraph.runQueryAllST runner maxCount args
+        , queryTest_args = (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
@@ -66,6 +82,7 @@ allTestCases =
   , case2
   , case3
   , case4
+  , case5
   ]
 
 case1 :: QueryTest
@@ -118,6 +135,27 @@ case4 =
     , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32BE . bytestring-0.11.4.0:Data.ByteString.Lazy.fromStrict"
     , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32LE . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
     ]
+
+-- NB: There exists no path from src to dst, but this query is _really_ slow for the web server (45-50 seconds)
+case5 :: QueryTest
+case5 =
+  mkTestCase 1
+    ( ( stringBuffer
+      , T.unpack $ FunGraph.renderFullyQualifiedType stringBuffer
+      )
+    , ( stringTemplate
+      , T.unpack $ FunGraph.renderFullyQualifiedType stringTemplate
+      )
+    )
+  []
+  where
+    stringBuffer = FunGraph.parsePprTyConSingleton "ghc-9.6.2:GHC.Data.StringBuffer.StringBuffer"
+
+    stringTemplate = FunGraph.parsePprTyConMulti $
+      FunGraph.FgType_TyConApp
+        "HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate"
+        [FunGraph.FgType_List $ FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []]
+
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [FunGraph.Function ()] }
   deriving (Eq, Ord, Generic)

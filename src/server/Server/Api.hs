@@ -1,10 +1,11 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Server.Api where
 
 import Servant.API
-import Servant.HTML.Lucid
+import Servant.HTML.Lucid (HTML)
 import Lucid (Html)
 import qualified Data.Text as T
 
@@ -33,3 +34,6 @@ data HxBoosted = HxBoosted
 
 instance FromHttpApiData HxBoosted where
   parseQueryParam _ = pure HxBoosted
+
+instance ToHttpApiData HxBoosted where
+  toQueryParam HxBoosted = ""

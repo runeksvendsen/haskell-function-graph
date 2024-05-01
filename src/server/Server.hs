@@ -2,8 +2,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
--- TODO: Find out why this query is so slow (45 seconds): Params: [("src","ghc-9.6.2:GHC.Data.StringBuffer.StringBuffer"),("src_input","String"),("dst","HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate [ghc-prim-0.10.0:GHC.Types.Char]"),("dst_input","String")]
-module Server (main) where
+module Server
+  ( main
+  , app
+  , withHandlers
+  )
+  where
 
 import qualified Server.Pages.Root
 import qualified Server.Pages.Search
@@ -22,16 +26,26 @@ import qualified Data.Graph.Digraph as DG
 import qualified FunGraph.Util
 
 main :: Html () -> Int -> FilePath -> IO ()
-main appendToHead port graphDataFilename = do
-  Server.GraphViz.healthCheck
-  FunGraph.Util.putStrFlush "Building graph... "
-  FunGraph.withGraphFromFile FunGraph.defaultBuildConfig graphDataFilename $ \graph -> do
-    getGraphInfo graph >>= \graphInfo -> putStrLn $ "done. " <> graphInfo
-    FunGraph.Util.putStrFlush "Initializing handlers... "
-    handlers <- mkHandlers appendToHead graph
-    putStrLn "done"
+main appendToHead port graphDataFilename =
+  withHandlers FunGraph.Util.putStrFlush appendToHead graphDataFilename $ \handlers -> do
     putStrLn $ "Running server on " <> "http://localhost:" <> show port
-    run port $ app handlers
+    run port $ enableProdMiddleware $ app handlers
+
+withHandlers
+  :: (String -> IO ()) -- ^ Log 'String' without trailing newline
+  -> Html () -- ^ Add to HTML @head@ element
+  -> FilePath -- ^ Graph data filename, e.g. @data/all3.json@
+  -> (Handlers -> IO a) -- ^ Do something with a 'Handlers'
+  -> IO a
+withHandlers logStr appendToHead graphDataFilename f = do
+  Server.GraphViz.healthCheck logStr
+  logStr "Building graph... "
+  FunGraph.withGraphFromFile FunGraph.defaultBuildConfig graphDataFilename $ \graph -> do
+    getGraphInfo graph >>= \graphInfo -> logStr $ "done. " <> graphInfo <> "\n"
+    logStr "Initializing handlers... "
+    handlers <- mkHandlers appendToHead graph
+    logStr "done\n"
+    f handlers
   where
     getGraphInfo graph = ST.stToIO $ do
       vertexCount <- DG.vertexCount graph
@@ -93,7 +107,7 @@ data Handlers = Handlers
 
 app :: Handlers -> Application
 app (Handlers rootHandler searchHandler typeaheadHandler) =
-  enableMiddleware $ serve myApi server
+  serve myApi server
   where
     myApi :: Proxy Api
     myApi = Proxy
@@ -103,6 +117,7 @@ app (Handlers rootHandler searchHandler typeaheadHandler) =
       searchHandler :<|>
       typeaheadHandler
 
-    enableMiddleware =
-        RL.logStdoutDev
-      . Errors.errorMw @JSON @'["error", "status"]
+enableProdMiddleware :: Application -> Application
+enableProdMiddleware =
+    RL.logStdoutDev
+  . Errors.errorMw @JSON @'["error", "status"]

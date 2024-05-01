@@ -48,14 +48,16 @@ runDotExe args stdin = do
 -- | Throw an exception in case of missing runtime dependencies.
 --
 --   Run when starting server to exit early in case of missing runtime dependencies.
-healthCheck :: IO ()
-healthCheck = do
-  FunGraph.Util.putStrFlush $ "Checking if '" <> dotExe <> "' executable can be executed... "
+healthCheck
+  :: (String -> IO ()) -- ^ Log 'String' without trailing newline
+  -> IO ()
+healthCheck logStr = do
+  logStr $ "Checking if '" <> dotExe <> "' executable can be executed... "
   runDotExe ["-V"] "" >>= either handleError (const $ pure ())
-  putStrLn "success"
+  logStr "success\n"
   where
     handleError errStr = do
-      putStrLn $ "FAIL. Is the executable '" <> dotExe <> "' on the PATH?"
+      logStr $ "FAIL. Is the executable '" <> dotExe <> "' on the PATH?\n"
       Exit.die errStr
 
 renderDotGraph
