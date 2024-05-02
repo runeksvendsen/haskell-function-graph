@@ -49,7 +49,7 @@ withHandlers logStr appendToHead graphDataFilename f = do
   where
     getGraphInfo graph = ST.stToIO $ do
       vertexCount <- DG.vertexCount graph
-      edgeCount <- DG.edgeCount graph
+      edgeCount <- DG.edgeCountMulti graph
       pure $ "Vertex count: " <> show vertexCount <> ", edge count: " <> show edgeCount <> "."
 
 mkHandlers
