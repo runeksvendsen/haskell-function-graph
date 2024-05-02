@@ -62,8 +62,12 @@ runTests port = do
     setResponseTimeoutSeconds 60 Network.HTTP.Client.defaultManagerSettings
   defaultMain
     [ bgroup "Web server"
-      [ bgroup "/search" $
-          map (benchHttpRequest manager) FunGraph.Test.allTestCases
+      [ bgroup "search"
+        [ bgroup "with graph" $
+            map (benchHttpRequest manager Nothing) FunGraph.Test.allTestCases
+        , bgroup "without graph" $
+            map (benchHttpRequest manager (Just Server.Api.NoGraph)) FunGraph.Test.allTestCases
+        ]
       ]
     ]
   where
@@ -74,8 +78,11 @@ runTests port = do
       let baseUrl' = Servant.Client.BaseUrl Servant.Client.Http "127.0.0.1" port ""
       in Servant.Client.ClientEnv manager baseUrl' Nothing Servant.Client.defaultMakeClientRequest
 
-    benchHttpRequest :: Network.HTTP.Client.Manager -> FunGraph.Test.QueryTest -> Benchmark
-    benchHttpRequest manager qt =
+    benchHttpRequest
+      :: Network.HTTP.Client.Manager
+      -> Maybe Server.Api.NoGraph
+      -> FunGraph.Test.QueryTest -> Benchmark
+    benchHttpRequest manager mNoGraph qt =
       let (src, dst) = FunGraph.Test.queryTest_args qt
           clientEnv = mkClientEnv manager
           clientM = searchClientM
@@ -83,6 +90,7 @@ runTests port = do
             (Just $ FunGraph.renderFullyQualifiedType src)
             (Just $ FunGraph.renderFullyQualifiedType dst)
             Nothing
+            mNoGraph
       in bench (FunGraph.Test.queryTest_name qt) $
         nfIO $ Servant.Client.runClientM clientM clientEnv >>= either Ex.throwIO pure
 
@@ -91,10 +99,11 @@ searchClientM
   -> Maybe T.Text -- src
   -> Maybe T.Text -- dst
   -> Maybe Word -- limit
+  -> Maybe Server.Api.NoGraph -- don't draw graph?
   -> Servant.Client.ClientM BSL.ByteString
-searchClientM hxBoosted mSrc mDst mLimit =
+searchClientM hxBoosted mSrc mDst mLimit mNoGraph =
   Lucid.renderBS <$>
-    Servant.Client.client searchApi hxBoosted mSrc mDst mLimit
+    Servant.Client.client searchApi hxBoosted mSrc mDst mLimit mNoGraph
   where
     searchApi :: Proxy Server.Api.Search
     searchApi = Proxy

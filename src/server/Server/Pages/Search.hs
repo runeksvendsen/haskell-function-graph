@@ -27,7 +27,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as TLE
-import Server.Api (HxBoosted)
+import Server.Api (HxBoosted, NoGraph (NoGraph))
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -47,25 +47,22 @@ createSearchEnv graph = do
     }
 
 -- ^ /Search/ handler type
-type HandlerType
+type HandlerType ret
   =  Maybe HxBoosted -- ^ 'HX-Boosted' header. 'Just' if present and 'Nothing' if not present.
   -> Maybe T.Text -- ^ src
   -> Maybe T.Text -- ^ dst
   -> Maybe Word -- ^ max number of results
-  -> Handler (Html ()) -- ^ (html, (src, dst))
+  -> Maybe NoGraph -- ^ if 'Just' then don't draw a graph
+  -> Handler ret
 
 handler
   :: SearchEnv
-  -> Maybe HxBoosted -- ^ 'HX-Boosted' header. 'Just' if present and 'Nothing' if not present.
-  -> Maybe T.Text -- ^ src
-  -> Maybe T.Text -- ^ dst
-  -> Maybe Word -- ^ max number of results
-  -> Handler (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-handler searchEnv _ (Just src) (Just dst) mMaxCount =
+  -> HandlerType (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
+handler searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
   let defaultLimit = 100 -- TODO: add as HTML input field
   in do
-    page searchEnv src dst (fromMaybe defaultLimit mMaxCount)
-handler _ _ _ _ _ =
+    page searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
+handler _ _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
 page
@@ -73,40 +70,49 @@ page
   -> T.Text
   -> T.Text
   -> Word
+  -> Maybe NoGraph
   -> Handler (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount = do
+page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
-  resultGraphE <- liftIO $ renderResultGraphIO (src, dst)
-  either
-    (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
-    (const $ pure ())
-    resultGraphE
   results <- liftIO $ ST.stToIO $ getResults (src, dst)
-  pure $ (, (src, dst)) $ if null results then noResultsText (src, dst) else do
-    table_ $ do
-      thead_ $
-        tr_ $ do
-          td_ "Function composition"
-          td_ "Dependencies"
-      tbody_ $
-        forM_ (map fst results) $ \result ->
-          tr_ $ do
-            td_ $ renderResult result
-            td_ $
-              mconcat $
-                intersperse ", " $
-                  map mkPackageLink (nubOrd $ map FunGraph._function_package result)
-    h3_ "Result graph"
-    either
-      (const $ plain "Failed to render result graph")
-      toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
-      resultGraphE
-    openSvgInNewWindowBtn
+  let resultHtml' =
+        table_ $ do
+          thead_ $
+            tr_ $ do
+              td_ "Function composition"
+              td_ "Dependencies"
+          tbody_ $
+            forM_ (map fst results) $ \result ->
+              tr_ $ do
+                td_ $ renderResult result
+                td_ $
+                  mconcat $
+                    intersperse ", " $
+                      map mkPackageLink (nubOrd $ map FunGraph._function_package result)
+  let resultHtml = if null results then noResultsText (src, dst) else resultHtml'
+  htmlGraph <- case mNoGraph of
+    Just NoGraph -> pure mempty
+    Nothing -> do
+      resultGraphE <- liftIO $ renderResultGraphIO (src, dst)
+      either
+        (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
+        (const $ pure ())
+        resultGraphE
+      pure $ do
+        h3_ "Result graph"
+        either
+          (const $ mkErrorText "Failed to render result graph")
+          toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+          resultGraphE
+        openSvgInNewWindowBtn
+  pure (resultHtml <> htmlGraph, (src, dst))
   where
+    mkErrorText = p_ [style_ "color:red"]
+
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
     noResultsText (src, dst) =
-      p_ [style_ "color:red"] $ mconcat
+      mkErrorText $ mconcat
         [ "No results found. No path from "
         , mono $ toHtml $ FunGraph.renderFullyQualifiedType src
         , " to "

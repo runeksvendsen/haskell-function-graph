@@ -2,7 +2,14 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Server.Api where
+module Server.Api
+  ( Api
+  , Root
+  , Search
+  , Typeahead
+  , HxBoosted(..)
+  , NoGraph(..)
+  ) where
 
 import Servant.API
 import Servant.HTML.Lucid (HTML)
@@ -20,6 +27,7 @@ type Search
   :> QueryParam "src" T.Text
   :> QueryParam "dst" T.Text
   :> QueryParam "limit" Word
+  :> QueryParam "no_graph" NoGraph
   :> Get '[HTML] (Html ())
 
 type Typeahead
@@ -37,3 +45,13 @@ instance FromHttpApiData HxBoosted where
 
 instance ToHttpApiData HxBoosted where
   toQueryParam HxBoosted = ""
+
+-- | If absent, draw a graph (otherwise don't)
+data NoGraph = NoGraph
+  deriving Show
+
+instance FromHttpApiData NoGraph where
+  parseQueryParam _ = pure NoGraph
+
+instance ToHttpApiData NoGraph where
+  toQueryParam NoGraph = ""

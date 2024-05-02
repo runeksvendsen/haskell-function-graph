@@ -63,8 +63,8 @@ mkHandlers appendToHead graph = do
   searchEnv <- Server.Pages.Search.createSearchEnv graph
   pure $ Handlers
         (mkRootHandler ("", Nothing))
-        (\mHxBoosted mSrc mDst mMaxCount -> do
-            let runSearchHandler = Server.Pages.Search.handler searchEnv mHxBoosted mSrc mDst mMaxCount
+        (\mHxBoosted mSrc mDst mMaxCount mNoGraph -> do
+            let runSearchHandler = Server.Pages.Search.handler searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph
             case mHxBoosted of
               Just HxBoosted -> do
                 (searchResult, _) <- runSearchHandler
@@ -102,7 +102,7 @@ mkHandlers appendToHead graph = do
 
 data Handlers = Handlers
   !Server.Pages.Root.HandlerType
-  !Server.Pages.Search.HandlerType
+  !(Server.Pages.Search.HandlerType (Html ()))
   !Server.Pages.Typeahead.HandlerType
 
 app :: Handlers -> Application
