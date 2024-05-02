@@ -83,6 +83,7 @@ allTestCases =
   , case3
   , case4
   , case5
+  , case6
   ]
 
 case1 :: QueryTest
@@ -156,6 +157,18 @@ case5 =
         "HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate"
         [FunGraph.FgType_List $ FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []]
 
+-- Also a slow web query (~20s)
+case6 :: QueryTest
+case6 =
+  mkTestCase 1
+    ( ( FunGraph.parsePprTyConSingleton "network-3.1.4.0:Network.Socket.Types.Socket"
+      , "Socket"
+      )
+    , ( FunGraph.parsePprTyConSingleton "network-3.1.4.0:Network.Socket.Types.SockAddr"
+      , "SockAddr"
+      )
+    )
+  []
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [FunGraph.Function ()] }
   deriving (Eq, Ord, Generic)
