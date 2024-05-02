@@ -6,10 +6,6 @@
 {-# HLINT ignore "Use camelCase" #-}
 module FunGraph.Test
 ( allTestCases
-, case1
-, case2
-, case3
-, case4
 , QueryTest(..), queryTest_runQuery
 , PPFunctions(..)
 )
