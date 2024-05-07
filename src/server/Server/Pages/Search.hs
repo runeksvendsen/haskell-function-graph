@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 
 module Server.Pages.Search
 ( page
@@ -75,7 +74,8 @@ page
 page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
-  results <- liftIO $ ST.stToIO $ getResults (src, dst)
+  queryResult <- liftIO $ ST.stToIO $ query (src, dst)
+  let queryResultPaths = getQueryResultPaths (src, dst) queryResult
   let resultHtml' =
         table_ $ do
           thead_ $
@@ -83,18 +83,18 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
               td_ "Function composition"
               td_ "Dependencies"
           tbody_ $
-            forM_ (map fst results) $ \result ->
+            forM_ (map fst queryResultPaths) $ \result ->
               tr_ $ do
                 td_ $ renderResult result
                 td_ $
                   mconcat $
                     intersperse ", " $
                       map mkPackageLink (nubOrd $ map FunGraph._function_package result)
-  let resultHtml = if null results then noResultsText (src, dst) else resultHtml'
+  let resultHtml = if null queryResultPaths then noResultsText (src, dst) else resultHtml'
   htmlGraph <- case mNoGraph of
     Just NoGraph -> pure mempty
     Nothing -> do
-      resultGraphE <- liftIO $ renderResultGraphIO (src, dst)
+      resultGraphE <- liftIO $ renderResultGraphIO queryResult
       either
         (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
         (const $ pure ())
@@ -133,26 +133,23 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
         pure
         (lookupVertex txt)
 
-    getResults srcDst =
-      take (fromIntegral maxCount) .
-        FunGraph.queryResultTreeToPaths srcDst <$> query srcDst
-
-    -- TODO: link nodes/types to Hackage SrcLoc (e.g. https://hackage.haskell.org/package/fast-logger-3.2.2/docs/src/System.Log.FastLogger.LogStr.html#LogStr)
-    -- TODO: link edges/functions to Hackage docs (e.g. https://hackage.haskell.org/package/text-2.0.2/docs/Data-Text-Encoding.html#v:decodeASCII-39-)
-    renderResultGraphIO srcDst =
-      ST.stToIO (resultDotGraph srcDst)
-        >>= Server.GraphViz.renderDotGraph
-
-    resultDotGraph srcDst =
-      query srcDst
-        >>= Util.graphFromQueryResult
-        >>= Util.graphToDot ""
-
     query srcDst =
       FunGraph.runQueryTree
         (fromIntegral maxCount)
         srcDst
         graph
+
+    getQueryResultPaths srcDst queryResult =
+      take (fromIntegral maxCount) $
+        FunGraph.queryResultTreeToPaths srcDst queryResult
+
+    renderResultGraphIO queryResult =
+      let
+        resultDotGraph =
+          Util.graphFromQueryResult queryResult
+            >>= Util.graphToDot ""
+      in ST.stToIO resultDotGraph
+        >>= Server.GraphViz.renderDotGraph
 
     renderResult :: [FunGraph.TypedFunction] -> Html ()
     renderResult fns =
@@ -178,9 +175,6 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
             , "background-color: rgb(200, 200, 200)"
             ]
       in span_ [style]
-
-plain :: Monad m => T.Text -> HtmlT m ()
-plain = toHtml
 
 openSvgInNewWindowBtn :: Html ()
 openSvgInNewWindowBtn = do
