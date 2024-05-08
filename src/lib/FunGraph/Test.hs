@@ -19,9 +19,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
-import qualified Control.Monad.ST as ST
 import Data.Bifunctor (first)
-import qualified Data.Graph.Dijkstra as Dijkstra
 import qualified Data.Text as T
 
 data QueryTest = QueryTest
@@ -30,8 +28,7 @@ data QueryTest = QueryTest
         :: forall s v meta.
            (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
         => (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
-        -> (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
-        -> ST.ST s [(PPFunctions, Double)]
+        -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
     , queryTest_args :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
@@ -39,11 +36,7 @@ data QueryTest = QueryTest
 -- | Apply 'queryTest_runQueryFun' to 'queryTest_args'
 queryTest_runQuery
   :: QueryTest
-  -> (forall s v meta.
-           (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
-        => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
-        -> ST.ST s [(PPFunctions, Double)]
-      )
+  -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
 queryTest_runQuery qt =
   queryTest_runQueryFun qt (queryTest_args qt)
 
@@ -55,8 +48,8 @@ mkTestCase
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQueryFun = \args runner ->
-            mapQueryResult . take maxCount <$> FunGraph.runQueryAllST runner maxCount args
+        , queryTest_runQueryFun = \args ->
+            mapQueryResult . take maxCount <$> FunGraph.queryPathsGA maxCount args
         , queryTest_args = (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }

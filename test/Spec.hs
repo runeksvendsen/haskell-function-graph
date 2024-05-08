@@ -63,7 +63,7 @@ main' shouldTrace graph = do
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
           HSpec.it "contained in top query results" $ do
-            result <- ST.stToIO $ FunGraph.Test.queryTest_runQuery test (runQueryFunction graph)
+            result <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
             Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 FunGraph.Test.queryTest_expectedResult test
@@ -73,7 +73,7 @@ main' shouldTrace graph = do
   where
     traceFunction = if shouldTrace then traceResults else id
 
-    runQueryFunction = if shouldTrace then FunGraph.runQueryTrace else FunGraph.runQuery
+    runQueryFunction = if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
 
     traceResults :: [(FunGraph.Test.PPFunctions, Double)] -> [(FunGraph.Test.PPFunctions, Double)]
     traceResults results = if null results then results else -- make `traceResults []` a no-op

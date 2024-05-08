@@ -112,7 +112,7 @@ graphToDot name =
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
 
--- | Build a graph from the output of 'FunGraph.runQueryTreeST'
+-- | Build a graph from the output of 'FunGraph.queryTreeGA'
 graphFromQueryResult
   :: [([NE.NonEmpty TypedFunction], Double)]
   -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))

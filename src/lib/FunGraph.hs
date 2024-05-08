@@ -9,7 +9,8 @@
 --   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
 module FunGraph
   ( -- * Queries
-    runQueryAll, runQueryTree, runQueryAllST, runQueryTreeST, runQuery, runQueryTrace
+    queryPathsGA, queryTreeGA
+  , GraphAction, runGraphAction, runGraphActionTrace
     -- * Conversions
   , queryResultTreeToPaths
   , spTreeToPaths, spTreePathsCount
@@ -35,7 +36,6 @@ import qualified Data.Graph.Digraph as DG
 import qualified Data.Graph.Dijkstra as Dijkstra
 import Control.Monad.ST (ST)
 import Data.Functor (void)
-import qualified Control.Monad.ST as ST
 import Data.List (foldl', sortOn, intercalate)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
@@ -75,56 +75,16 @@ functionWeight (src, dst) function
     (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
     -- TODO: 'fqtPackage' ignores the package of the type constructors for list, tuples and unit. So e.g. both "[Char]" and "Char" will return only the package for "Char".
 
--- | Run 'runQueryAllST'
-runQueryAll
-  :: Int
-  -> (FullyQualifiedType, FullyQualifiedType)
-  -> DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> [([TypedFunction], Double)]
-runQueryAll maxCount (src, dst) graph =
-  ST.runST $ do
-    g <- DG.thaw graph
-    runQueryAllST (Dijkstra.runDijkstra g) maxCount (src, dst)
-
--- | Run 'runQueryTreeST'
-runQueryTree
-  :: Int
-  -> (FullyQualifiedType, FullyQualifiedType)
-  -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> ST s [([NE.NonEmpty TypedFunction], Double)]
-runQueryTree maxCount (src, dst) g =
-  runQueryTreeST (Dijkstra.runDijkstra g) maxCount (src, dst)
-
--- | Passed to 'runQueryAllST' to run without tracing
-runQuery
-  :: DG.Digraph s v meta
-  -> (Double -> meta -> Double)
-  -> Double
-  -> Dijkstra.Dijkstra s v meta a
-  -> ST s a
-runQuery = Dijkstra.runDijkstra
-
--- | Passed to 'runQueryAllST' to run with tracing turned on
-runQueryTrace
-  :: DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> (Double -> NE.NonEmpty TypedFunction -> Double)
-  -> Double
-  -> Dijkstra.Dijkstra s FullyQualifiedType (NE.NonEmpty TypedFunction) a
-  -> ST s a
-runQueryTrace = Dijkstra.runDijkstraTraceGeneric traceFunDebug
-
-runQueryAllST
+queryPathsGA
   :: ( v ~ FullyQualifiedType
-     , meta ~ NE.NonEmpty TypedFunction
      )
-  => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST s a)
-  -> Int
-  -> (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
-  -> ST s [([TypedFunction], Double)]
-runQueryAllST runner maxCount (src, dst) =
-  queryResultTreeToPaths (src, dst) <$> runQueryTreeST runner maxCount (src, dst)
+  => Int
+  -> (v, v) -- ^ (src, dst)
+  -> GraphAction s v (NE.NonEmpty TypedFunction) [([TypedFunction], Double)]
+queryPathsGA maxCount (src, dst) =
+  queryResultTreeToPaths (src, dst) <$> queryTreeGA maxCount (src, dst)
 
--- | Convert the "shortest path"-tree produced by 'runQueryTreeST'
+-- | Convert the "shortest path"-tree produced by 'queryTreeGA'
 --   to a list of shortest paths.
 --
 --   TODO: avoid sorting
@@ -150,18 +110,18 @@ queryResultTreeToPaths (src, dst) res =
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
 
-runQueryTreeST
+queryTreeGA
   :: ( v ~ FullyQualifiedType
      , meta ~ NE.NonEmpty TypedFunction
      )
-  => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST s a)
-  -> Int
-  -> (FullyQualifiedType, FullyQualifiedType)
-  -> ST s [([NE.NonEmpty TypedFunction], Double)]
-runQueryTreeST runner maxCount (src, dst) = do
-  res <- runner weightCombine initialWeight $
-    fromMaybe [] <$> Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
-  pure $ map (first (map (removeNonMin . DG.eMeta))) res
+  => Int
+  -> (v, v)
+  -> GraphAction s v meta [([meta], Double)]
+queryTreeGA maxCount (src, dst) =
+  GraphAction weightCombine initialWeight $ do
+    res <- fromMaybe [] <$>
+      Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
+    pure $ map (first (map (removeNonMin . DG.eMeta))) res
   where
     -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
     removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
@@ -290,3 +250,42 @@ traceFunDebug = \case
           , showInterestingPath interestingPath
           ]
         else Nothing
+
+-- | A computation on a graph, e.g. a shortest path algorithm
+data GraphAction s v meta a = GraphAction
+  { graphActionWeightCombine :: Double -> meta -> Double -- ^ Weight combination function
+  , graphActionInitialWeight :: Double -- ^ Initial weight
+  , graphActionAction :: Dijkstra.Dijkstra s v meta a
+  }
+
+instance Functor (GraphAction s v meta) where
+  fmap f ga = ga{ graphActionAction = fmap f (graphActionAction ga)}
+
+-- | Run a 'GraphAction'
+runGraphAction
+  :: forall s v meta a.
+     DG.Digraph s v meta
+  -> GraphAction s v meta a
+  -> ST s a
+runGraphAction dg ga =
+  Dijkstra.runDijkstra
+    dg
+    (graphActionWeightCombine ga)
+    (graphActionInitialWeight ga)
+    (graphActionAction ga)
+
+-- | Run a 'GraphAction' with tracing
+runGraphActionTrace
+  :: forall s v meta a.
+     ( v ~ FullyQualifiedType
+     , meta ~ NE.NonEmpty TypedFunction
+     )
+  => DG.Digraph s v meta
+  -> GraphAction s v meta a
+  -> ST s a
+runGraphActionTrace dg ga =
+  Dijkstra.runDijkstraTraceGeneric traceFunDebug
+    dg
+    (graphActionWeightCombine ga)
+    (graphActionInitialWeight ga)
+    (graphActionAction ga)

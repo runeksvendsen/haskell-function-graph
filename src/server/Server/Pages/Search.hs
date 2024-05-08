@@ -134,10 +134,10 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
         (lookupVertex txt)
 
     query srcDst =
-      FunGraph.runQueryTree
-        (fromIntegral maxCount)
-        srcDst
-        graph
+      FunGraph.runGraphAction graph $
+        FunGraph.queryTreeGA
+          (fromIntegral maxCount)
+          srcDst
 
     getQueryResultPaths srcDst queryResult =
       take (fromIntegral maxCount) $
