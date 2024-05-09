@@ -87,7 +87,8 @@ main = do
     query timoutMillis graph src dst = fmap (fromMaybe []) $
       System.Timeout.timeout (timoutMillis * 1000) $
         ST.stToIO $
-          FunGraph.runGraphAction graph $ FunGraph.queryTreeGA maxCount (src, dst)
+          fmap (fromMaybe $ error "no results") $
+            FunGraph.runGraphAction graph $ FunGraph.queryTreeGA maxCount (src, dst)
 
     color :: ANSI.Color -> String -> String
     color color' str = concat

@@ -16,6 +16,8 @@ import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified Data.List.NonEmpty as NE
 import Data.Functor (void)
+import Data.String (fromString)
+import Data.Bifunctor (bimap)
 -- BEGIN: extra args
 import Data.List
 import qualified System.Environment as Arg
@@ -63,7 +65,12 @@ main' shouldTrace graph = do
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
           HSpec.it "contained in top query results" $ do
-            result <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
+            mResult <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
+            let vertexNotFoundError = "unknown src and/or dst vertex: " <> fromString (show $ bimap FunGraph.renderFullyQualifiedType FunGraph.renderFullyQualifiedType $ FunGraph.Test.queryTest_args test)
+            result <- maybe
+              (fail vertexNotFoundError)
+              pure
+              mResult
             Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 FunGraph.Test.queryTest_expectedResult test

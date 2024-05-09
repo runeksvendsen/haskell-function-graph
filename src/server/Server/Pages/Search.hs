@@ -27,6 +27,9 @@ import qualified Data.Graph.Digraph as DG
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as TLE
 import Server.Api (HxBoosted, NoGraph (NoGraph))
+import Data.String (fromString)
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import Data.Bifunctor (bimap)
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -74,7 +77,11 @@ page
 page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
-  (queryResult, queryResultPaths) <- liftIO $ ST.stToIO $ query (src, dst)
+  mQueryResults <- liftIO $ ST.stToIO $ query (src, dst)
+  (queryResult, queryResultPaths) <- maybe
+    (internalError $ mkMissingVertexError (src, dst))
+    pure
+    mQueryResults
   let resultHtml' =
         table_ $ do
           thead_ $
@@ -108,6 +115,15 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
   pure (resultHtml <> htmlGraph, (src, dst))
   where
     mkErrorText = p_ [style_ "color:red"]
+
+    internalError errText =
+      throwError $ err500 { errBody = "Internal error: " <> errText }
+
+    mkMissingVertexError (src, dst) = BSL.unwords
+      [ "Query returned 'no such vertex' but we have the vertices right here:"
+      , fromString (show $ bimap FunGraph.renderFullyQualifiedType FunGraph.renderFullyQualifiedType (src, dst)) <> "."
+      , "Please report bug at https://github.com/runeksvendsen/haskell-function-graph/issues."
+      ]
 
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
     noResultsText (src, dst) =

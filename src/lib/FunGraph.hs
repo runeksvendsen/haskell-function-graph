@@ -35,11 +35,11 @@ import qualified Json
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Graph.Dijkstra as Dijkstra
 import Control.Monad.ST (ST)
-import Data.Functor (void)
+import Data.Functor (void, (<&>))
 import Data.List (foldl', sortOn, intercalate)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-import Data.Maybe (listToMaybe, fromMaybe)
+import Data.Maybe (listToMaybe)
 import Debug.Trace (traceM)
 import Control.Applicative ((<|>))
 import Data.Bifunctor (first)
@@ -82,19 +82,21 @@ queryTreeAndPathsGA
   -> (v, v)
   -- ^ (src, dst)
   -> GraphAction s v (NE.NonEmpty TypedFunction)
-       ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)])
+       (Maybe ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)]))
   -- ^ ((Tree, Paths), weight)
 queryTreeAndPathsGA maxCount srcDst = do
-  (\tree -> (tree, queryResultTreeToPaths maxCount srcDst tree)) <$> queryTreeGA maxCount srcDst
+  queryTreeGA maxCount srcDst <&> \mTree ->
+    mTree <&> \tree ->
+      (tree, queryResultTreeToPaths maxCount srcDst tree)
 
 queryPathsGA
   :: ( v ~ FullyQualifiedType
      )
   => Int
   -> (v, v) -- ^ (src, dst)
-  -> GraphAction s v (NE.NonEmpty TypedFunction) [([TypedFunction], Double)]
+  -> GraphAction s v (NE.NonEmpty TypedFunction) (Maybe [([TypedFunction], Double)])
 queryPathsGA maxCount (src, dst) =
-  queryResultTreeToPaths maxCount (src, dst) <$> queryTreeGA maxCount (src, dst)
+  fmap (queryResultTreeToPaths maxCount (src, dst)) <$> queryTreeGA maxCount (src, dst)
 
 -- | Convert the "shortest path"-tree produced by 'queryTreeGA'
 --   to a list of shortest paths.
@@ -129,12 +131,11 @@ queryTreeGA
      )
   => Int
   -> (v, v)
-  -> GraphAction s v meta [([meta], Double)]
+  -> GraphAction s v meta (Maybe [([meta], Double)])
 queryTreeGA maxCount (src, dst) =
   GraphAction weightCombine initialWeight $ do
-    res <- fromMaybe [] <$>
-      Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
-    pure $ map (first (map (removeNonMin . DG.eMeta))) res
+    mRes <- Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
+    pure $ map (first (map (removeNonMin . DG.eMeta))) <$> mRes
   where
     -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
     removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
