@@ -11,9 +11,7 @@ where
 import Lucid
 import Lucid.Htmx
 import qualified Data.Text as T
-import Data.Maybe (fromMaybe)
 import qualified FunGraph
-import Control.Monad (forM)
 
 type HandlerType = Html ()
 
@@ -104,6 +102,7 @@ mkSuggestions id' mFqt suggestions =
   where
     selectedSuggestion :: FunGraph.FullyQualifiedType -> Html ()
     selectedSuggestion fqt =
+      -- TODO: fix below so it agrees with Server.Pages.Typeahead.suggestions
       option_
         [ value_ $ FunGraph.renderFullyQualifiedType fqt
         , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
