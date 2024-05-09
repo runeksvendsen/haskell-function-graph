@@ -82,17 +82,18 @@ queryPathsGA
   -> (v, v) -- ^ (src, dst)
   -> GraphAction s v (NE.NonEmpty TypedFunction) [([TypedFunction], Double)]
 queryPathsGA maxCount (src, dst) =
-  queryResultTreeToPaths (src, dst) <$> queryTreeGA maxCount (src, dst)
+  queryResultTreeToPaths maxCount (src, dst) <$> queryTreeGA maxCount (src, dst)
 
 -- | Convert the "shortest path"-tree produced by 'queryTreeGA'
 --   to a list of shortest paths.
 --
 --   TODO: avoid sorting
 queryResultTreeToPaths
-  :: (FullyQualifiedType, FullyQualifiedType)
+  :: Int
+  -> (FullyQualifiedType, FullyQualifiedType)
   -> [([NE.NonEmpty TypedFunction], Double)] -- ^ (src, dst)
   -> [([TypedFunction], Double)]
-queryResultTreeToPaths (src, dst) res =
+queryResultTreeToPaths maxCount (src, dst) res = take maxCount $
     sortOn (sortOnFun . fst)
     $ concatMap (\(nePath, weight) -> map (,weight) . spTreeToPaths $ nePath )
       res
