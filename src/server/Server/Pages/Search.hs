@@ -74,8 +74,7 @@ page
 page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
-  queryResult <- liftIO $ ST.stToIO $ query (src, dst)
-  let queryResultPaths = FunGraph.queryResultTreeToPaths (fromIntegral maxCount) (src, dst) queryResult
+  (queryResult, queryResultPaths) <- liftIO $ ST.stToIO $ query (src, dst)
   let resultHtml' =
         table_ $ do
           thead_ $
@@ -135,7 +134,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
 
     query srcDst =
       FunGraph.runGraphAction graph $
-        FunGraph.queryTreeGA
+        FunGraph.queryTreeAndPathsGA
           (fromIntegral maxCount)
           srcDst
 

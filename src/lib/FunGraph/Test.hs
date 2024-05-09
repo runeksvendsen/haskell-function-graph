@@ -49,7 +49,7 @@ mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
         , queryTest_runQueryFun =
-            fmap mapQueryResult . FunGraph.queryPathsGA maxCount
+            fmap (mapQueryResult . snd) . FunGraph.queryTreeAndPathsGA maxCount
         , queryTest_args = (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
