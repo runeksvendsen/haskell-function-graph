@@ -9,7 +9,7 @@
 --   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
 module FunGraph
   ( -- * Queries
-    queryPathsGA, queryTreeGA
+    queryPathsGA, queryTreeGA, queryTreeAndPathsGA
   , GraphAction, runGraphAction, runGraphActionTrace
     -- * Conversions
   , queryResultTreeToPaths
@@ -75,6 +75,18 @@ functionWeight (src, dst) function
     (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
     -- TODO: 'fqtPackage' ignores the package of the type constructors for list, tuples and unit. So e.g. both "[Char]" and "Char" will return only the package for "Char".
 
+queryTreeAndPathsGA
+  :: ( v ~ FullyQualifiedType
+     )
+  => Int -- max count
+  -> (v, v)
+  -- ^ (src, dst)
+  -> GraphAction s v (NE.NonEmpty TypedFunction)
+       ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)])
+  -- ^ ((Tree, Paths), weight)
+queryTreeAndPathsGA maxCount srcDst = do
+  (\tree -> (tree, queryResultTreeToPaths maxCount srcDst tree)) <$> queryTreeGA maxCount srcDst
+
 queryPathsGA
   :: ( v ~ FullyQualifiedType
      )
@@ -89,9 +101,9 @@ queryPathsGA maxCount (src, dst) =
 --
 --   TODO: avoid sorting
 queryResultTreeToPaths
-  :: Int
-  -> (FullyQualifiedType, FullyQualifiedType)
-  -> [([NE.NonEmpty TypedFunction], Double)] -- ^ (src, dst)
+  :: Int -- ^ maxCount
+  -> (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
+  -> [([NE.NonEmpty TypedFunction], Double)] -- ^ Output of 'queryTreeGA'
   -> [([TypedFunction], Double)]
 queryResultTreeToPaths maxCount (src, dst) res = take maxCount $
     sortOn (sortOnFun . fst)
