@@ -80,8 +80,8 @@ main' shouldTrace graph = do
         trace (unlines $ "" : map (\(path, weight) -> show weight <> ": " <> show path) results) results
 
 isSupersetOf :: (Show a, Ord a) => Set.Set a -> Set.Set a -> IO ()
-isSupersetOf superSet subSet =
-  Set.intersection superSet subSet `shouldBe` subSet
+isSupersetOf actual expected =
+  actual `shouldBe` Set.union actual expected
 
 -- | Pass extra arguments to an IO action that parses CLI arguments.
 --
