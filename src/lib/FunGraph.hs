@@ -4,13 +4,17 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
+{-# HLINT ignore "Use newtype instead of data" #-}
 -- | Query the function graph.
 --
 --   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
 module FunGraph
   ( -- * Queries
     queryPathsGA, queryTreeGA, queryTreeAndPathsGA
-  , GraphAction, runGraphAction, runGraphActionTrace
+  , GraphAction, runGraphAction, runGraphActionTrace, GraphActionError(..)
     -- * Conversions
   , queryResultTreeToPaths
   , spTreeToPaths, spTreePathsCount
@@ -45,6 +49,10 @@ import Control.Applicative ((<|>))
 import Data.Bifunctor (first)
 import qualified Data.Text as T
 import qualified Types
+import Control.Monad.Except (ExceptT)
+import qualified Control.Monad.Except as ET
+import GHC.Generics (Generic)
+import Control.DeepSeq (NFData)
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -82,11 +90,10 @@ queryTreeAndPathsGA
   -> (v, v)
   -- ^ (src, dst)
   -> GraphAction s v (NE.NonEmpty TypedFunction)
-       (Maybe ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)]))
+       ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)])
   -- ^ ((Tree, Paths), weight)
 queryTreeAndPathsGA maxCount srcDst = do
-  queryTreeGA maxCount srcDst <&> \mTree ->
-    mTree <&> \tree ->
+  queryTreeGA maxCount srcDst <&> \tree ->
       (tree, queryResultTreeToPaths maxCount srcDst tree)
 
 queryPathsGA
@@ -94,9 +101,9 @@ queryPathsGA
      )
   => Int
   -> (v, v) -- ^ (src, dst)
-  -> GraphAction s v (NE.NonEmpty TypedFunction) (Maybe [([TypedFunction], Double)])
+  -> GraphAction s v (NE.NonEmpty TypedFunction) [([TypedFunction], Double)]
 queryPathsGA maxCount (src, dst) =
-  fmap (queryResultTreeToPaths maxCount (src, dst)) <$> queryTreeGA maxCount (src, dst)
+  queryResultTreeToPaths maxCount (src, dst) <$> queryTreeGA maxCount (src, dst)
 
 -- | Convert the "shortest path"-tree produced by 'queryTreeGA'
 --   to a list of shortest paths.
@@ -131,12 +138,23 @@ queryTreeGA
      )
   => Int
   -> (v, v)
-  -> GraphAction s v meta (Maybe [([meta], Double)])
+  -> GraphAction s v meta [([meta], Double)]
 queryTreeGA maxCount (src, dst) =
   GraphAction weightCombine initialWeight $ do
-    mRes <- Dijkstra.dijkstraShortestPathsLevels maxCount 1 (src, dst) -- TODO: factor out "level" arg
-    pure $ map (first (map (removeNonMin . DG.eMeta))) <$> mRes
+    srcVid <- lookupVertex src
+    dstVid <- lookupVertex dst
+    res <- ET.lift $ Dijkstra.dijkstraShortestPathsLevels maxCount 1 (srcVid, dstVid) -- TODO: factor out "level" arg
+    pure $ map (first (map (removeNonMin . DG.eMeta))) res
   where
+    lookupVertex v = do
+      mVid <- ET.lift $ do
+        g <- Dijkstra.getGraph
+        ET.lift $ DG.lookupVertex g v
+      maybe
+        (ET.throwError $ GraphActionError_NoSuchVertex v)
+        pure
+        mVid
+
     -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
     removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
     removeNonMin functions =
@@ -265,11 +283,17 @@ traceFunDebug = \case
           ]
         else Nothing
 
+data GraphActionError v
+  = GraphActionError_NoSuchVertex v
+      deriving (Eq, Show, Ord, Generic)
+
+instance NFData a => NFData (GraphActionError a)
+
 -- | A computation on a graph, e.g. a shortest path algorithm
 data GraphAction s v meta a = GraphAction
   { graphActionWeightCombine :: Double -> meta -> Double -- ^ Weight combination function
   , graphActionInitialWeight :: Double -- ^ Initial weight
-  , graphActionAction :: Dijkstra.Dijkstra s v meta a
+  , graphActionAction :: ExceptT (GraphActionError v) (Dijkstra.Dijkstra s v meta) a
   }
 
 instance Functor (GraphAction s v meta) where
@@ -280,13 +304,13 @@ runGraphAction
   :: forall s v meta a.
      DG.Digraph s v meta
   -> GraphAction s v meta a
-  -> ST s a
+  -> ST s (Either (GraphActionError v) a)
 runGraphAction dg ga =
   Dijkstra.runDijkstra
     dg
     (graphActionWeightCombine ga)
     (graphActionInitialWeight ga)
-    (graphActionAction ga)
+    (ET.runExceptT $ graphActionAction ga)
 
 -- | Run a 'GraphAction' with tracing
 runGraphActionTrace
@@ -296,10 +320,10 @@ runGraphActionTrace
      )
   => DG.Digraph s v meta
   -> GraphAction s v meta a
-  -> ST s a
+  -> ST s (Either (GraphActionError v) a)
 runGraphActionTrace dg ga =
   Dijkstra.runDijkstraTraceGeneric traceFunDebug
     dg
     (graphActionWeightCombine ga)
     (graphActionInitialWeight ga)
-    (graphActionAction ga)
+    (ET.runExceptT $ graphActionAction ga)

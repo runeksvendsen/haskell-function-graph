@@ -21,4 +21,8 @@ lazyText =
 
 string :: (FullyQualifiedType, String)
 string =
-  (parsePprTyConSingleton "[ghc-prim-0.10.0:GHC.Types.Char]", "String")
+  (str, "String")
+  where
+    str = FunGraph.parsePprTyConMulti $
+      FunGraph.FgType_List $
+        FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []

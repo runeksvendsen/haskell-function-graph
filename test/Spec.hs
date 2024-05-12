@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use infix" #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
@@ -16,8 +17,6 @@ import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified Data.List.NonEmpty as NE
 import Data.Functor (void)
-import Data.String (fromString)
-import Data.Bifunctor (bimap)
 -- BEGIN: extra args
 import Data.List
 import qualified System.Environment as Arg
@@ -65,12 +64,8 @@ main' shouldTrace graph = do
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
           HSpec.it "contained in top query results" $ do
-            mResult <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
-            let vertexNotFoundError = "unknown src and/or dst vertex: " <> fromString (show $ bimap FunGraph.renderFullyQualifiedType FunGraph.renderFullyQualifiedType $ FunGraph.Test.queryTest_args test)
-            result <- maybe
-              (fail vertexNotFoundError)
-              pure
-              mResult
+            eResult <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
+            result <- either handleError pure eResult
             Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 FunGraph.Test.queryTest_expectedResult test
@@ -81,6 +76,10 @@ main' shouldTrace graph = do
     traceFunction = if shouldTrace then traceResults else id
 
     runQueryFunction = if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
+
+    handleError = \case
+      FunGraph.GraphActionError_NoSuchVertex v ->
+        fail $ "unknown vertex " <> show (FunGraph.renderFullyQualifiedType v)
 
     traceResults :: [(FunGraph.Test.PPFunctions, Double)] -> [(FunGraph.Test.PPFunctions, Double)]
     traceResults results = if null results then results else -- make `traceResults []` a no-op

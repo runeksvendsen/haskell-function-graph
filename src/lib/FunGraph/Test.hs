@@ -29,7 +29,7 @@ data QueryTest = QueryTest
         :: forall s v meta.
            (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
         => (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
-        -> FunGraph.GraphAction s v meta (Maybe [(PPFunctions, Double)])
+        -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
     , queryTest_args :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
@@ -37,7 +37,7 @@ data QueryTest = QueryTest
 -- | Apply 'queryTest_runQueryFun' to 'queryTest_args'
 queryTest_runQuery
   :: QueryTest
-  -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) (Maybe [(PPFunctions, Double)])
+  -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
 queryTest_runQuery qt =
   queryTest_runQueryFun qt (queryTest_args qt)
 
@@ -50,7 +50,7 @@ mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
         , queryTest_runQueryFun = \args ->
-            fmap (mapQueryResult . snd) <$> FunGraph.queryTreeAndPathsGA maxCount args
+            mapQueryResult . snd <$> FunGraph.queryTreeAndPathsGA maxCount args
         , queryTest_args = (fst from, fst to)
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
