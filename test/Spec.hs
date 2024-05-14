@@ -56,7 +56,8 @@ main' shouldTrace graph = do
   graphEdgeSet <- ST.stToIO (DG.toEdges graph)
   let graphEdges = Set.map void $ Set.fromList $ concat $ Set.map (NE.toList . DG.eMeta) graphEdgeSet
   let testCase test =
-        HSpec.describe (FunGraph.Test.queryTest_name test) $ do
+        let (maxCount, _) = FunGraph.Test.queryTest_args test
+        in HSpec.describe (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $ do
           HSpec.it "edges are contained in the graph" $ do
             let ppFunctions = Set.fromList $
                   concatMap FunGraph.Test.unPPFunctions $

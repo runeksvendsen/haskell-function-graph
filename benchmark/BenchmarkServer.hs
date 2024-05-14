@@ -83,15 +83,15 @@ runTests port = do
       -> Maybe Server.Api.NoGraph
       -> FunGraph.Test.QueryTest -> Benchmark
     benchHttpRequest manager mNoGraph qt =
-      let (src, dst) = FunGraph.Test.queryTest_args qt
+      let (maxCount, (src, dst)) = FunGraph.Test.queryTest_args qt
           clientEnv = mkClientEnv manager
           clientM = searchClientM
             Nothing -- TODO: also bench 'HX-Boosted'?
             (Just $ FunGraph.renderFullyQualifiedType src)
             (Just $ FunGraph.renderFullyQualifiedType dst)
-            Nothing
+            (Just $ fromIntegral maxCount)
             mNoGraph
-      in bench (FunGraph.Test.queryTest_name qt) $
+      in bench (FunGraph.Test.queryTest_name qt <> " maxCount=" <> show maxCount) $
         nfIO $ Servant.Client.runClientM clientM clientEnv >>= either Ex.throwIO pure
 
 searchClientM

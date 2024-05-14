@@ -29,7 +29,8 @@ main = do
     ]
   where
     queryPaths mutGraph test =
-      bench (FunGraph.Test.queryTest_name test) $
+      let (maxCount, _) = FunGraph.Test.queryTest_args test
+      in bench (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $
         nfAppIO (\g -> ST.stToIO $ FunGraph.runGraphAction g $ FunGraph.Test.queryTest_runQuery test) mutGraph
 
     readGraphData fileName =
