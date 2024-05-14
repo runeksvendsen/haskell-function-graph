@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Server.Pages.Typeahead
 ( mkHandler, HandlerType
+, suggestionOption_
 )
 where
 
@@ -101,11 +102,14 @@ suggestions
   -> Html ()
 suggestions prioTrie prefix = do
   forM_ mSuggestions $ \suggestionsLst ->
-    forM_ suggestionsLst $ \(_, fqt) ->
-      option_
-        [ value_ $ FunGraph.renderFullyQualifiedType fqt
-        , label_ $ FunGraph.renderFullyQualifiedType fqt
-        ]
-        ""
+    forM_ suggestionsLst $ \(_, fqt) -> suggestionOption_ [] fqt
   where
     mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
+
+suggestionOption_ :: [Attribute] -> FunGraph.FullyQualifiedType -> Html ()
+suggestionOption_ extraAttrs fqt =
+  option_
+    ([ value_ $ FunGraph.renderFullyQualifiedType fqt
+    , label_ $ FunGraph.renderFullyQualifiedType fqt
+    ] ++ extraAttrs)
+    ""

@@ -12,6 +12,7 @@ import Lucid
 import Lucid.Htmx
 import qualified Data.Text as T
 import qualified FunGraph
+import qualified Server.Pages.Typeahead
 
 type HandlerType = Html ()
 
@@ -98,14 +99,4 @@ mkSuggestions id' mFqt suggestions =
     [ id_ id'
     , name_ id'
     , required_ ""
-    ] $ maybe mempty selectedSuggestion mFqt <> suggestions
-  where
-    selectedSuggestion :: FunGraph.FullyQualifiedType -> Html ()
-    selectedSuggestion fqt =
-      -- TODO: fix below so it agrees with Server.Pages.Typeahead.suggestions
-      option_
-        [ value_ $ FunGraph.renderFullyQualifiedType fqt
-        , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
-        , selected_ ""
-        ]
-        ""
+    ] $ maybe mempty (Server.Pages.Typeahead.suggestionOption_ [selected_ ""]) mFqt <> suggestions
