@@ -129,7 +129,7 @@ case4 =
     , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32LE . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
     ]
 
--- NB: There exists no path from src to dst, but this query is _really_ slow for the web server (45-50 seconds)
+-- NB: There exists no path from src to dst, but this query is _really_ slow for the web server (45-50 seconds) with maxCount=100
 case5 :: QueryTest
 case5 =
   mkTestCase 1
@@ -149,7 +149,7 @@ case5 =
         "HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate"
         [FunGraph.FgType_List $ FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []]
 
--- Also a slow web query (~20s)
+-- Also a slow web query (~20s) with maxCount=100
 case6 :: QueryTest
 case6 =
   mkTestCase 1
