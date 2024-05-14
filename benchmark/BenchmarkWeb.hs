@@ -3,6 +3,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NumDecimals #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+-- | Benchmark the web server
+--
+-- TODO: Make exe exit properly for CLI arguments that don't need server (e.g. --help, --list)
 module Main (main) where
 
 import qualified Server.Api
