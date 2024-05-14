@@ -105,7 +105,7 @@ benchmark benchmark-lib
 benchmark benchmark-web
   import: warnings
   type: exitcode-stdio-1.0
-  main-is: BenchmarkServer.hs
+  main-is: BenchmarkWeb.hs
   hs-source-dirs: benchmark
   build-depends:
       base
