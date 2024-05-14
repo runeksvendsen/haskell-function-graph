@@ -161,7 +161,7 @@ parseIdentifier
   -> Either String (T.Text, T.Text, Types.FgPackage T.Text)
   -- ^ (name, module name, package). E.g. ("encodeUtf16BE", "Data.Text.Encoding", "text-2.0.2")
 parseIdentifier txt = do
-  -- NOTE: 'Types.parsePprTyCon' is used because a type constructor and an identifer are of the same form (only different is lower/upper case first letter for the 'name')
+  -- NOTE: 'Types.parsePprTyCon' is used because an identifier is the same as a type constructor except for the lower/upper case first letter for the 'name'
   Types.FgTyCon name moduleName package <- Types.parsePprTyCon txt
   pure (name, moduleName, package)
 
