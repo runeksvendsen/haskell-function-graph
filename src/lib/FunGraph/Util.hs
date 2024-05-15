@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 module FunGraph.Util
   ( bsToStr
   , typedFunctionsPathTypes
@@ -7,6 +8,7 @@ module FunGraph.Util
   , showTypeSig
   , graphFromQueryResult
   , graphToDot
+  , putStrFlush
   )
   where
 
@@ -22,7 +24,11 @@ import qualified Data.Text.Lazy as LT
 import Control.Monad.ST (ST)
 import qualified Data.Set as Set
 import qualified Lucid
+import qualified Lucid.Base as Lucid
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import qualified Types
+import qualified System.IO
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -48,9 +54,9 @@ idxEdgePathTypes
 idxEdgePathTypes = toPathTypes DG.eTo DG.eFrom
 
 -- | Show vertices moved through
-showTypeSig :: [FullyQualifiedType] -> BS.ByteString
+showTypeSig :: [FullyQualifiedType] -> T.Text
 showTypeSig =
-  BS.intercalate " -> " . map unFullyQualifiedType
+  T.intercalate " -> " . map renderFullyQualifiedType
 
 bsToStr :: BSC8.ByteString -> String
 bsToStr = UTF8.decode . BS.unpack
@@ -63,30 +69,50 @@ graphToDot name =
   let bsToLT = LT.fromStrict . TE.decodeUtf8
       -- use 'lucid' to escape what needs escaping
       htmlString html = DG.DotString_Raw $ "< " <> Lucid.renderText html <> " >"
-      vertexAttributes txt = Map.fromList
+      -- NOTE: We want to link each type constructor ('Types.FgTyCon') using 'Types.tgTyConHackageSrcUrl', so that e.g. "Maybe Int" will link "Maybe" and "Int" to its own URL. A DOT graph "HTML string" does not support <a> tags, so instead we use a table where the <td> tag contains an href attribute. Lastly, to avoid a border around each <td> element, we set the <table> "border" attribute to zero.
+      renderFqtUrlTable fqt = tableNoBorder $ Lucid.tr_ $
+        renderFullyQualifiedTypeGeneric
+          (Lucid.td_ [] . Lucid.toHtml)
+          (\tycon ->
+              tdLink
+                (Types.tgTyConHackageSrcUrl tycon)
+                (Lucid.toHtml $ Types.renderFgTyConQualifiedNoPackage tycon)
+          )
+          fqt
+      tdLink :: T.Text -> Lucid.Html () -> Lucid.Html ()
+      tdLink url = Lucid.td_ [Lucid.href_ url, Lucid.target_ "_blank"]
+      tableNoBorder = Lucid.table_
+        [ Lucid.makeAttribute "BORDER" "0"
+        , Lucid.makeAttribute "CELLSPACING" "0"
+        ]
+      vertexAttributes fqt = Map.fromList
         [ ( "label"
-          ,  htmlString (Lucid.b_ $ Lucid.toHtml txt)
+          ,  htmlString (renderFqtUrlTable fqt)
           )
         , ( "tooltip"
-          , DG.DotString_DoubleQuoted txt
+          , DG.DotString_DoubleQuoted $ LT.fromStrict . renderFullyQualifiedType $ fqt
           )
         ]
 
-      edgeAttributes fn = Map.fromList
-        [ ( "label"
-          , DG.DotString_DoubleQuoted $ LT.fromStrict . TE.decodeUtf8 $ _function_name fn
-          )
-        , ( "labeltooltip"
-          , DG.DotString_DoubleQuoted $ LT.pack $ show $ PrettyTypedFunction fn
-          )
-        ]
+      edgeAttributes fn =
+        let edgeToolTip = DG.DotString_DoubleQuoted $ LT.pack $ show $ PrettyTypedFunction fn
+        in Map.fromList
+          [ ( "label"
+            , htmlString $ tableNoBorder $ Lucid.tr_ $ tdLink
+                (functionToHackageDocsUrl fn)
+                (Lucid.toHtml $ _function_name fn)
+            )
+          , ( "tooltip", edgeToolTip)
+          , ( "labeltooltip", edgeToolTip)
+          , ( "edgetooltip", edgeToolTip)
+          ]
 
   in DG.graphToDotMulti
-    (vertexAttributes . bsToLT . unFullyQualifiedType)
+    vertexAttributes
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
 
--- | Build a graph from the output of 'FunGraph.runQueryTreeST'
+-- | Build a graph from the output of 'FunGraph.queryTreeGA'
 graphFromQueryResult
   :: [([NE.NonEmpty TypedFunction], Double)]
   -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
@@ -95,3 +121,9 @@ graphFromQueryResult res = do
   where
     resultToEdgeSet =
       Set.fromList . concatMap NE.toList . concatMap fst
+
+-- | Print a string, without trailing newline, to 'System.IO.stdout' and flush the handle afterwards.
+--   This makes sure the string is actually printed, instead of waiting for a subsequent newline character.
+putStrFlush :: String -> IO ()
+putStrFlush str =
+  putStr str >> System.IO.hFlush System.IO.stdout

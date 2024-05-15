@@ -20,21 +20,19 @@ import qualified Data.Graph.Digraph as DG
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as BSL
 import Control.Monad.ST (ST)
-import qualified Data.ByteString as BS
 import qualified Control.Monad.ST as ST
 import Data.Containers.ListUtils (nubOrdOn)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-import qualified Data.ByteString.Char8 as BSC8
-import qualified Codec.Binary.UTF8.String as UTF8
-import Data.Maybe (mapMaybe)
+import qualified Types
+import qualified Data.Text as T
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
 
 fileReadDeclarationMap
   :: FilePath
-  -> IO (Either String [Json.DeclarationMapJson String])
+  -> IO (Either String [Json.DeclarationMapJson T.Text])
 fileReadDeclarationMap fileName = A.eitherDecode <$> BSL.readFile fileName
 
 withGraphFromFile
@@ -59,7 +57,7 @@ withFrozenGraphFromFile cfg fileName f =
 -- | Build a mutable graph
 buildGraphMut
   :: BuildConfig
-  -> [Json.DeclarationMapJson String]
+  -> [Json.DeclarationMapJson T.Text]
   -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
 buildGraphMut cfg =
   buildGraph'
@@ -70,20 +68,18 @@ buildGraphMut cfg =
     excludeTypesUnqualified = buildConfig_excludeTypesUnqualified cfg
 
     isExcludedPackage =
-      (`Set.member` excludePackages) . packageNoVersion . strToBs . Json.declarationMapJson_package
+      (`Set.member` excludePackages) . Types.fgPackageName . Json.declarationMapJson_package
 
     isExcludedFunction :: TypedFunction -> Bool
     isExcludedFunction function =
       let fnTypes = [DG.fromNode function, DG.toNode function]
-          fnTypesUnqualified = Set.fromList $ mapMaybe fqtUnqualify fnTypes
-          fqtUnqualify fnType = -- TODO: only works for "simple" types (cf. 'parseIdentifier')
-            (\(a, _, _) -> a) <$> parseIdentifier (unFullyQualifiedType fnType)
+          fnTypesUnqualified = Set.fromList $ map renderFullyQualifiedType fnTypes
           intersect types cfgTypes =
             -- 'cfgTypes' is the first argument to (&&) to speed up evaluation with 'emptyBuildConfig'
             not (Set.null cfgTypes) && not (Set.null types) && not (Set.null $ Set.intersection types cfgTypes)
       in Set.fromList fnTypes `intersect` excludeTypes
         || fnTypesUnqualified `intersect` excludeTypesUnqualified
-        || any (`BS.isInfixOf` _function_module function) excludeModulePatterns
+        || any (`T.isInfixOf` _function_module function) excludeModulePatterns
 
     functionIdentity fn =
       ( _function_name fn
@@ -92,7 +88,7 @@ buildGraphMut cfg =
       )
 
     buildGraph'
-      :: [Json.DeclarationMapJson String]
+      :: [Json.DeclarationMapJson T.Text]
       -> ST s (DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction))
     buildGraph' =
       DG.fromEdgesMulti
@@ -101,9 +97,6 @@ buildGraphMut cfg =
         . filter (not . isExcludedFunction) -- remove excluded functions
         . concatMap declarationMapJsonToFunctions
         . filter (not . isExcludedPackage) -- remove excluded packages
-
-strToBs :: String -> BSC8.ByteString
-strToBs = BS.pack . UTF8.encode
 
 -- | Excludes various preludes and internal modules
 defaultBuildConfig :: BuildConfig
@@ -131,13 +124,13 @@ emptyBuildConfig = mempty
 
 -- TODO: add "exclude loops"
 data BuildConfig = BuildConfig
-  { buildConfig_excludePackages :: Set.Set BSC8.ByteString
+  { buildConfig_excludePackages :: Set.Set T.Text
   -- ^ Set of package names (without version postfix)
   , buildConfig_excludeTypes :: Set.Set FullyQualifiedType
   -- ^ Exclude function if either src or dst type matches this
-  , buildConfig_excludeTypesUnqualified :: Set.Set BSC8.ByteString
-  -- ^ Only the type name, e.g. "Text"/"String"/"ByteArray#"
-  , buildConfig_excludeModulePatterns :: Set.Set BSC8.ByteString
+  , buildConfig_excludeTypesUnqualified :: Set.Set T.Text
+  -- ^ Only the type name, e.g. @Text@, @String@, @ByteArray#@
+  , buildConfig_excludeModulePatterns :: Set.Set T.Text
   -- ^ Exclude if '_function_module' 'BS.isInfixOf'
   } deriving (Eq, Show)
 

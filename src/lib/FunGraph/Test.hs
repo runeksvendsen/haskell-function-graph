@@ -2,13 +2,12 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
+{-# HLINT ignore "Use fmap" #-}
 module FunGraph.Test
 ( allTestCases
-, case1
-, case2
-, case3
-, case4
-, QueryTest(..)
+, QueryTest(..), queryTest_runQuery
 , PPFunctions(..)
 )
 where
@@ -17,47 +16,56 @@ import qualified FunGraph
 import FunGraph.Examples
 
 import Data.Functor (void)
-import Data.Maybe (fromMaybe)
-import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
-import qualified Control.Monad.ST as ST
 import Data.Bifunctor (first)
-import qualified Data.Graph.Dijkstra as Dijkstra
+import qualified Data.Text as T
 
 data QueryTest = QueryTest
     { queryTest_name :: String
-    , queryTest_runQuery
+    , queryTest_runQueryFun
         :: forall s v meta.
            (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
-        => (forall a. (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra s v meta a -> ST.ST s a)
-        -> ST.ST s [(PPFunctions, Double)]
+        => Args
+        -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
+    , queryTest_args :: Args
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
+
+type Args = (Int, (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (maxCount, (src, dst))
+
+-- | Apply 'queryTest_runQueryFun' to 'queryTest_args'
+queryTest_runQuery
+  :: QueryTest
+  -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
+queryTest_runQuery qt =
+  queryTest_runQueryFun qt (queryTest_args qt)
 
 mkTestCase
   :: Int
   -> ((FunGraph.FullyQualifiedType, String), (FunGraph.FullyQualifiedType, String))
-  -> [BSC8.ByteString]
+  -> [T.Text]
   -> QueryTest
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQuery = \runner ->
-            mapQueryResult . take maxCount <$> FunGraph.runQueryAllST runner maxCount (fst from, fst to)
+        , queryTest_runQueryFun = \args ->
+            mapQueryResult . snd <$> uncurry FunGraph.queryTreeAndPathsGA args
+        , queryTest_args = (maxCount, (fst from, fst to))
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
     mapQueryResult = map (first $ PPFunctions . map void)
 
-    fns :: [BSC8.ByteString] -> [PPFunctions]
+    fns :: [T.Text] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)
 
-    fn :: BSC8.ByteString -> NE.NonEmpty FunGraph.UntypedFunction
-    fn bs = fromMaybe
-      (error $ "parseComposedFunctions: bad input: " <> BSC8.unpack bs)
+    fn :: T.Text -> NE.NonEmpty FunGraph.UntypedFunction
+    fn bs = either
+      (error $ "parseComposedFunctions: bad input: " <> T.unpack bs)
+      id
       (FunGraph.parseComposedFunctions bs)
 
 allTestCases :: [QueryTest]
@@ -66,6 +74,8 @@ allTestCases =
   , case2
   , case3
   , case4
+  , case5
+  , case6
   ]
 
 case1 :: QueryTest
@@ -118,6 +128,39 @@ case4 =
     , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32BE . bytestring-0.11.4.0:Data.ByteString.Lazy.fromStrict"
     , "text-2.0.2:Data.Text.Lazy.Encoding.decodeUtf32LE . bytestring-0.11.4.0:Data.ByteString.Lazy.Char8.fromStrict"
     ]
+
+-- NB: There exists no path from src to dst, but this query is _really_ slow for the web server (45-50 seconds) with maxCount=100
+case5 :: QueryTest
+case5 =
+  mkTestCase 1
+    ( ( stringBuffer
+      , T.unpack $ FunGraph.renderFullyQualifiedType stringBuffer
+      )
+    , ( stringTemplate
+      , T.unpack $ FunGraph.renderFullyQualifiedType stringTemplate
+      )
+    )
+  []
+  where
+    stringBuffer = FunGraph.parsePprTyConSingleton "ghc-9.6.2:GHC.Data.StringBuffer.StringBuffer"
+
+    stringTemplate = FunGraph.parsePprTyConMulti $
+      FunGraph.FgType_TyConApp
+        "HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate"
+        [FunGraph.FgType_List $ FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []]
+
+-- Also a slow web query (~20s) with maxCount=100
+case6 :: QueryTest
+case6 =
+  mkTestCase 1
+    ( ( FunGraph.parsePprTyConSingleton "network-3.1.4.0:Network.Socket.Types.Socket"
+      , "Socket"
+      )
+    , ( FunGraph.parsePprTyConSingleton "network-3.1.4.0:Network.Socket.Types.SockAddr"
+      , "SockAddr"
+      )
+    )
+  []
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [FunGraph.Function ()] }
   deriving (Eq, Ord, Generic)

@@ -23,14 +23,15 @@ main = do
       , bench "Thaw+freeze" $ nfAppIO (void . ST.stToIO . (FunGraph.freeze <=< FunGraph.thaw)) frozenGraph
       ]
     , bgroup "Query"
-      [ bgroup "runQueryAll" $
-          map (runQueryAll mutGraph) FunGraph.Test.allTestCases
+      [ bgroup "queryPaths" $
+          map (queryPaths mutGraph) FunGraph.Test.allTestCases
       ]
     ]
   where
-    runQueryAll mutGraph test =
-      bench (FunGraph.Test.queryTest_name test) $
-        nfAppIO (\g -> ST.stToIO $ FunGraph.Test.queryTest_runQuery test (FunGraph.runQuery g)) mutGraph
+    queryPaths mutGraph test =
+      let (maxCount, _) = FunGraph.Test.queryTest_args test
+      in bench (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $
+        nfAppIO (\g -> ST.stToIO $ FunGraph.runGraphAction g $ FunGraph.Test.queryTest_runQuery test) mutGraph
 
     readGraphData fileName =
       either fail pure =<< FunGraph.fileReadDeclarationMap fileName

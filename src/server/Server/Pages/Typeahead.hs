@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Server.Pages.Typeahead
-( mkHandler
+( mkHandler, HandlerType
+, suggestionOption_
 )
 where
 
@@ -10,7 +11,6 @@ import Control.Monad (forM_, forM)
 import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
-import qualified FunGraph.Types as FunGraph
 import Control.Monad.ST (stToIO)
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Map.Strict as Map
@@ -23,18 +23,44 @@ import qualified Data.Text.Encoding as TE
 import qualified Control.Exception as Ex
 import qualified Control.DeepSeq
 import qualified Control.Monad.ST as ST
+import qualified Data.Set as Set
+import qualified Data.Foldable
+
+-- ^ /Typeahead/ handler type
+type HandlerType
+  =  Maybe T.Text
+  -> Maybe T.Text
+  -> Handler (Html ())
 
 mkHandler
   :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
-  -> FunGraph.FrozenGraph
-  -> IO ( Maybe T.Text -> Maybe T.Text -> Handler (Html ())
-        , Html ()
-        ) -- ^ (handler, initial suggestions)
-mkHandler mLimit igraph = do
-  mPrioTrie <- stToIO (DG.thaw igraph) >>= mkPrioTrie mLimit
+  -> FunGraph.Graph ST.RealWorld
+  -> IO ( HandlerType, Html ()) -- ^ (handler, initial suggestions)
+mkHandler mLimit graph = do
+  mPrioTrie <- mkPrioTrie mLimit graph
   prioTrie <- maybe (fail "empty input graph in Typeahead handler") pure mPrioTrie
   let initialSuggestions = suggestions prioTrie ""
   pure (handler prioTrie, initialSuggestions)
+
+-- | For each vertex (type), count the number of different packages that export a function which operates on this vertex (type).
+calculatePriorities
+  :: DG.Digraph s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction)
+  -> ST.ST s (Map.Map DG.VertexId Word)
+calculatePriorities graph =
+    fmap (fromIntegral . Set.size) <$> DG.foldEdges
+      graph
+      (\srcVid dstVid edge map' -> pure $ addPackagesToSet srcVid edge (addPackagesToSet dstVid edge map'))
+      Map.empty
+  where
+    addPackagesToSet
+      :: DG.VertexId
+      -> DG.IdxEdge FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction)
+      -> Map.Map DG.VertexId (Set.Set (FunGraph.FgPackage T.Text))
+      -> Map.Map DG.VertexId (Set.Set (FunGraph.FgPackage T.Text))
+    addPackagesToSet vid edge map' =
+      let f :: DG.IdxEdge FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) -> Set.Set (FunGraph.FgPackage T.Text)
+          f = Set.fromList . Data.Foldable.toList . NE.map FunGraph._function_package . DG.eMeta
+      in Map.alter (Just . maybe (f edge) (<> f edge)) vid map'
 
 mkPrioTrie
   :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
@@ -42,15 +68,13 @@ mkPrioTrie
   -> IO (Maybe (Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType))
      -- ^ 'Nothing' if the input graph is empty
 mkPrioTrie mLimit graph = do
-  countList <- stToIO $ do
-    (outMap, inMap) <- DG.outgoingIncomingCount graph
-    let countMap = Map.unionWith (+) outMap inMap
-    mapM (traverse (lookupVertexId graph) . swap) (Map.toList countMap)
+  priorityList <- stToIO $ do
+    priorityMap <- calculatePriorities graph
+    mapM (traverse (lookupVertexId graph) . swap) (Map.toList priorityMap)
   let mTypeaheadData :: Maybe (NE.NonEmpty (BS.ByteString, (Word, FunGraph.FullyQualifiedType)))
-      mTypeaheadData = NE.nonEmpty $ countList <&> \(count, fqt) ->
-        (FunGraph.unFullyQualifiedType fqt, (count, fqt))
+      mTypeaheadData = NE.nonEmpty $ priorityList <&> \(count, fqt) ->
+        (TE.encodeUtf8 $ FunGraph.renderFullyQualifiedTypeUnqualified fqt, (count, fqt))
   forM mTypeaheadData $ \typeaheadData ->
-  -- typeaheadData <- maybe (fail "Empty graph in Typeahead handler") pure mTypeaheadData
     Ex.evaluate $ Control.DeepSeq.force $
       -- I believe deeply evaluating the PrioTrie is necessary because its very purpose is pre-computing stuff, ie. _not_ postponing evaluation until its result is demanded. For example, the sorted lists inside the PrioTrie must not be thunks, because that would mean we postpone sorting until a request demands it (which introduces unwanted latency for the first request that forces evaluation of a particular sorted list).
       Data.PrioTrie.fromList limit typeaheadData
@@ -78,8 +102,14 @@ suggestions
   -> Html ()
 suggestions prioTrie prefix = do
   forM_ mSuggestions $ \suggestionsLst ->
-    forM_ suggestionsLst $ \(_, fqt) ->
-      option_ [value_ $ TE.decodeUtf8 $ FunGraph.unFullyQualifiedType fqt] $
-        toHtml (FunGraph.fqtPackage fqt) -- NOTE: Just testing the effect of putting something here
+    forM_ suggestionsLst $ \(_, fqt) -> suggestionOption_ [] fqt
   where
     mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
+
+suggestionOption_ :: [Attribute] -> FunGraph.FullyQualifiedType -> Html ()
+suggestionOption_ extraAttrs fqt =
+  option_
+    ([ value_ $ FunGraph.renderFullyQualifiedType fqt
+    , label_ $ FunGraph.renderFullyQualifiedType fqt
+    ] ++ extraAttrs)
+    ""
