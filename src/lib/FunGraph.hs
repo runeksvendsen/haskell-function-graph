@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
@@ -14,6 +15,7 @@
 module FunGraph
   ( -- * Queries
     queryPathsGA, queryTreeGA, queryTreeAndPathsGA
+  , queryTreeTimeoutIO, queryTreeTimeoutIOTrace
   , GraphAction, runGraphAction, runGraphActionTrace, GraphActionError(..)
     -- * Conversions
   , queryResultTreeToPaths
@@ -38,7 +40,7 @@ import FunGraph.Build as Export
 import qualified Json
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Graph.Dijkstra as Dijkstra
-import Control.Monad.ST (ST)
+import Control.Monad.ST (ST, RealWorld)
 import Data.Functor (void, (<&>))
 import Data.List (foldl', sortOn, intercalate)
 import qualified Data.List.NonEmpty as NE
@@ -53,6 +55,9 @@ import Control.Monad.Except (ExceptT)
 import qualified Control.Monad.Except as ET
 import GHC.Generics (Generic)
 import Control.DeepSeq (NFData)
+import qualified Data.Time
+import qualified Streaming as S
+import qualified Control.Monad.ST as ST
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -92,7 +97,7 @@ queryTreeAndPathsGA
   -> GraphAction s v (NE.NonEmpty TypedFunction)
        ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)])
   -- ^ ((Tree, Paths), weight)
-queryTreeAndPathsGA maxCount srcDst = do
+queryTreeAndPathsGA maxCount srcDst =
   queryTreeGA maxCount srcDst <&> \tree ->
       (tree, queryResultTreeToPaths maxCount srcDst tree)
 
@@ -131,6 +136,109 @@ queryResultTreeToPaths maxCount (src, dst) res = take maxCount $
     allEq :: Eq a => [a] -> Bool
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
+
+queryTreeTimeoutIO
+  :: ( v ~ FullyQualifiedType
+     , meta ~ NE.NonEmpty TypedFunction
+     )
+  => DG.Digraph RealWorld v meta
+  -> Data.Time.NominalDiffTime
+  -> Int
+  -> (v, v)
+  -> ExceptT (GraphActionError v) IO
+      (S.Stream
+        (S.Of
+          (Dijkstra.TimeBoundedResult
+              ([meta], Double)
+          )
+        )
+        IO
+        ()
+      )
+queryTreeTimeoutIO g =
+  queryTreeTimeoutIO' g Dijkstra.runDijkstra
+
+queryTreeTimeoutIOTrace
+  :: ( v ~ FullyQualifiedType
+     , meta ~ NE.NonEmpty TypedFunction
+     )
+  => DG.Digraph RealWorld v meta
+  -> Data.Time.NominalDiffTime
+  -> Int
+  -> (v, v)
+  -> ExceptT (GraphActionError v) IO
+      (S.Stream
+        (S.Of
+          (Dijkstra.TimeBoundedResult
+              ([meta], Double)
+          )
+        )
+        IO
+        ()
+      )
+queryTreeTimeoutIOTrace g =
+  queryTreeTimeoutIO' g $ Dijkstra.runDijkstraTraceGeneric (>>= traceFunDebug)
+
+queryTreeTimeoutIO'
+  :: forall v meta.
+     ( v ~ FullyQualifiedType
+     , meta ~ NE.NonEmpty TypedFunction
+     )
+  => DG.Digraph RealWorld v meta
+  -> (forall a. DG.Digraph RealWorld v meta -> (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra RealWorld v meta a -> ST RealWorld a)
+  -> Data.Time.NominalDiffTime
+  -> Int
+  -> (v, v)
+  -> ExceptT (GraphActionError v) IO
+      (S.Stream
+        (S.Of
+          (Dijkstra.TimeBoundedResult
+              ([NE.NonEmpty TypedFunction], Double)
+          )
+        )
+        IO
+        ()
+      )
+queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
+  srcVid <- lookupVertex src
+  dstVid <- lookupVertex dst
+  let stream = Dijkstra.dijkstraShortestPathsLevelsTimeout runner' maxCount 1 (srcVid, dstVid) timeout -- TODO: factor out "level" arg
+      mapStream
+        :: S.Of (Dijkstra.TimeBoundedResult ([DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)], Double)) a
+        -> S.Of (Dijkstra.TimeBoundedResult ([NE.NonEmpty TypedFunction], Double)) a
+      mapStream = first $ fmap (first (map (removeNonMin . DG.eMeta)))
+  pure $ S.maps mapStream stream
+  where
+    lookupVertex :: v -> ExceptT (GraphActionError v) IO DG.VertexId
+    lookupVertex v = do
+      mVid <- ET.lift $ ST.stToIO $ DG.lookupVertex graph v
+      maybe
+        (ET.throwError $ GraphActionError_NoSuchVertex v)
+        pure
+        mVid
+
+    runner' :: forall a. Dijkstra.Dijkstra RealWorld v meta a -> ST RealWorld a
+    runner' = runner graph weightCombine initialWeight
+
+    -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
+    removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
+    removeNonMin functions =
+      let minWeight = weightCombine 0 functions
+          filterFun functionNE = functionWeight (src, dst) functionNE == minWeight
+      in NE.fromList $ NE.filter filterFun functions
+
+    initialWeight :: Double
+    initialWeight = 0
+
+    weightCombine
+      :: Double
+      -> NE.NonEmpty TypedFunction
+      -> Double
+    weightCombine w functions =
+      w + edgeWeightNE
+      where
+        edgeWeightNE =
+          minimum $ map (functionWeight (src, dst)) (NE.toList functions)
 
 queryTreeGA
   :: ( v ~ FullyQualifiedType
@@ -322,7 +430,7 @@ runGraphActionTrace
   -> GraphAction s v meta a
   -> ST s (Either (GraphActionError v) a)
 runGraphActionTrace dg ga =
-  Dijkstra.runDijkstraTraceGeneric traceFunDebug
+  Dijkstra.runDijkstraTraceGeneric (>>= traceFunDebug)
     dg
     (graphActionWeightCombine ga)
     (graphActionInitialWeight ga)
