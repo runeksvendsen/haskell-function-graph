@@ -10,35 +10,40 @@ where
 
 import Lucid
 import Lucid.Htmx
+import Server.HtmlStream
 import qualified Data.Text as T
 import qualified FunGraph
 import qualified Server.Pages.Typeahead
 
-type HandlerType = Html ()
+type HandlerType = HtmlStream IO ()
 
 page
-  :: Html ()
+  :: Monad m
+  => Html ()
   -- ^ Append to 'head' element
   -> Html ()
   -- ^ Initial typeahead suggestions (sequence of 'option' elements)
-  -> (Html (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
+  -> (HtmlStream m (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
   -- ^ Search result HTML and maybe the entered (src, dst).
   --
   --   If the user pastes a "/search?..." link into the browser then we want to display
   --   the root page with the search results included, as well as "src" and "dst" filled in.
-  -> Html ()
+  -> HtmlStream m ()
 page appendToHead initialSuggestions (searchResult, mSrcDst) = do
-  doctype_
-  html_ [lang_ "en"] $ do
+  streamHtml doctype_
+  streamTagBalancedAttr "html" [lang_ "en"]
+  streamHtml $
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-    body_  $ do
+  streamTagBalancedM "body" $ do
+    let targetId = "search_result"
+    streamHtml $ do
       h1_ "Search for compositions of functions"
-      let targetId = "search_result"
       form targetId initialSuggestions mSrcDst
       h3_ "Results"
-      div_ [id_ targetId] searchResult
+    streamTagBalancedAttrM "div" [id_ targetId]
+      searchResult
 
 form
   :: T.Text -- ^ targetId

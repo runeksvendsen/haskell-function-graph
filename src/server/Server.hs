@@ -24,6 +24,7 @@ import qualified Network.Wai.Middleware.RequestLogger as RL
 import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified FunGraph.Util
+import Server.HtmlStream (HtmlStream)
 
 main :: Html () -> Int -> FilePath -> IO ()
 main appendToHead port graphDataFilename =
@@ -62,7 +63,7 @@ mkHandlers appendToHead graph = do
   let mkRootHandler = Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions
   searchEnv <- Server.Pages.Search.createSearchEnv graph
   pure $ Handlers
-        (mkRootHandler ("", Nothing))
+        (mkRootHandler (mempty, Nothing))
         (\mHxBoosted mSrc mDst mMaxCount mNoGraph -> do
             let runSearchHandler = Server.Pages.Search.handler searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph
             case mHxBoosted of
@@ -102,7 +103,7 @@ mkHandlers appendToHead graph = do
 
 data Handlers = Handlers
   !Server.Pages.Root.HandlerType
-  !(Server.Pages.Search.HandlerType (Html ()))
+  !(Server.Pages.Search.HandlerType (HtmlStream IO ()))
   !Server.Pages.Typeahead.HandlerType
 
 app :: Handlers -> Application

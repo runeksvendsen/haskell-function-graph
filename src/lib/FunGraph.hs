@@ -18,7 +18,7 @@ module FunGraph
   , queryTreeTimeoutIO, queryTreeTimeoutIOTrace
   , GraphAction, runGraphAction, runGraphActionTrace, GraphActionError(..)
     -- * Conversions
-  , queryResultTreeToPaths
+  , queryResultTreeToPaths, queryResultTreeToPathsStream
   , spTreeToPaths, spTreePathsCount
   , renderComposedFunctions, renderComposedFunctionsStr, parseComposedFunctions
   , renderFunction, parseFunction
@@ -58,6 +58,7 @@ import Control.DeepSeq (NFData)
 import qualified Data.Time
 import qualified Streaming as S
 import qualified Control.Monad.ST as ST
+import qualified Streaming.Prelude as S
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -137,6 +138,17 @@ queryResultTreeToPaths maxCount (src, dst) res = take maxCount $
     allEq [] = True
     allEq (x:xs) = all (x ==) xs
 
+-- TMP
+queryResultTreeToPathsStream
+  :: Monad m
+  => Int
+  -> S.Stream (S.Of ([NE.NonEmpty edge], Double)) m r
+  -> S.Stream (S.Of ([edge], Double)) m ()
+queryResultTreeToPathsStream maxCount res = S.take maxCount $
+    S.concat
+    $ S.map (\(nePath, weight) -> map (,weight) . spTreeToPaths $ nePath )
+      res
+
 queryTreeTimeoutIO
   :: ( v ~ FullyQualifiedType
      , meta ~ NE.NonEmpty TypedFunction
@@ -147,16 +159,18 @@ queryTreeTimeoutIO
   -> (v, v)
   -> ExceptT (GraphActionError v) IO
       (S.Stream
-        (S.Of
-          (Dijkstra.TimeBoundedResult
-              ([meta], Double)
-          )
-        )
+        (S.Of ([NE.NonEmpty TypedFunction], Double))
         IO
         ()
       )
-queryTreeTimeoutIO g =
-  queryTreeTimeoutIO' g Dijkstra.runDijkstra
+queryTreeTimeoutIO g timeout maxCount =
+  fmap (S.mapMaybe f) .
+    queryTreeTimeoutIO' g Dijkstra.runDijkstra timeout maxCount
+  where
+    f = \case
+      Dijkstra.TimeBoundedResult_Result a -> Just a
+      Dijkstra.TimeBoundedResult_Done -> Nothing
+      Dijkstra.TimeBoundedResult_TimedOut -> Nothing
 
 queryTreeTimeoutIOTrace
   :: ( v ~ FullyQualifiedType

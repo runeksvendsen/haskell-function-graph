@@ -33,6 +33,8 @@ library
                     , stringsearch
                     , deepseq
                     , mtl
+                    , time
+                    , streaming
                     -- FunGraph.Util
                     , lucid
     hs-source-dirs:   src/lib
@@ -47,6 +49,8 @@ library function-graph-server
                       Server.Pages.Search
                       Server.Pages.Typeahead
                       Server.GraphViz
+                      Server.HtmlStream
+                      Data.BalancedStream
                       Data.PrioTrie
     build-depends:    base
                     , bellman-ford
@@ -61,6 +65,7 @@ library function-graph-server
                     , wai
                     , warp
                     , mtl
+                    , transformers
                     , containers
                     , unordered-containers
                     -- BEGIN: Server.GraphViz
@@ -69,6 +74,7 @@ library function-graph-server
                     , servant-errors
                     , wai-extra
                     , deepseq
+                    , streaming
     hs-source-dirs:   src/server
     default-language: Haskell2010
 
