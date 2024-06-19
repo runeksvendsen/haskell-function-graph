@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 -- | A stream where an item streamed earlier in the stream
 --   must be terminated by an item streamed later in the stream
 module Data.BalancedStream
@@ -18,6 +19,7 @@ where
 import qualified Streaming.Prelude as S
 import Data.Bifunctor (first)
 import Control.Monad.Trans.Class (MonadTrans(..))
+import qualified Streaming as S
 
 -- | A stream where an item streamed earlier in the stream
 --   must be terminated by an item streamed later in the stream.
@@ -122,3 +124,31 @@ yieldBalancedM
 yieldBalancedM a1 a2 bs =
   yieldBalanced a1 a2 >> bs
 
+-- | Append an element to the end of a stream based on all previously streamed elements.
+--
+-- Example:
+--
+-- >>> import Data.Functor.Identity
+-- >>> import Streaming.Prelude
+-- >>> let yieldSum = Streaming.Prelude.yield . Prelude.sum
+-- >>> runIdentity $ toList_ $ runIdentity $ appendStreamAccum yieldSum $ S.each [1, 2, 3, 4]
+-- [1,2,3,4,10]
+appendStreamAccum
+  :: Monad m
+  => ([a] -> S.Stream (S.Of a) m r')
+  -- ^ @mkStream@ function. Append an element to the end of the original stream.
+  --   Argument: all streamed items in the original stream (in reverse order).
+  -> S.Stream (S.Of a) m r
+  -- ^ Original stream
+  -> m (S.Stream (S.Of a) m r')
+  -- ^ Original stream with the result of the @mkStream@ function appended to it.
+appendStreamAccum mkStream s =
+  S.map fst . go [] <$> S.inspect s
+  where
+    go accum = \case
+      Left _ -> S.map (,accum) $ mkStream accum
+      Right (a S.:> fStream) -> do
+        let accum' = a : accum
+        S.yield (a, accum')
+        eitherStream <- lift $ S.inspect fStream
+        go accum' eitherStream
