@@ -21,7 +21,7 @@ import qualified Streaming.Prelude as S
 --
 -- >>> import Lucid
 -- >>> let stream = streamTagBalanced "html" <> streamTagBalanced "body" <> streamHtml (p_ "hello world")
--- >>> mconcat $ Data.Functor.Identity.runIdentity $ Streaming.Prelude.toList_ (toStream stream)
+-- >>> mconcat $ Data.Functor.Identity.runIdentity $ Streaming.Prelude.toList_ (Server.HtmlStream.toStream stream)
 -- <html><body><p>hello world</p></body></html>
 newtype HtmlStream m a = HtmlStream { unHtmlStream :: BalancedStream (Html ()) m a }
   deriving (Functor, Semigroup, Monoid, Applicative, Monad, MonadTrans)
@@ -76,8 +76,8 @@ streamTagBalancedAttr tag attrs = HtmlStream $
 streamTagBalancedM
   :: Monad m
   => T.Text -- ^ tag
-  -> HtmlStream m () -- ^ HTML inside tag
-  -> HtmlStream m ()
+  -> HtmlStream m a -- ^ HTML inside tag
+  -> HtmlStream m a
 streamTagBalancedM tag s = HtmlStream $
   yieldBalancedM start end (unHtmlStream s)
   where
@@ -88,8 +88,8 @@ streamTagBalancedAttrM
   :: Monad m
   => T.Text -- ^ tag
   -> [Lucid.Attribute]
-  -> HtmlStream m ()
-  -> HtmlStream m ()
+  -> HtmlStream m a
+  -> HtmlStream m a
 streamTagBalancedAttrM tag attrs s = HtmlStream $
   yieldBalancedM (start `Lucid.with` attrs) end (unHtmlStream s)
   where

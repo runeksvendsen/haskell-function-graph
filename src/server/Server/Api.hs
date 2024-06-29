@@ -12,7 +12,6 @@ module Server.Api
   , Typeahead
   , HxBoosted(..)
   , NoGraph(..)
-  , StreamIO
   ) where
 
 import Servant.API

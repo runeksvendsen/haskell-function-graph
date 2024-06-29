@@ -141,10 +141,9 @@ queryResultTreeToPaths maxCount (src, dst) res = take maxCount $
 -- TMP
 queryResultTreeToPathsStream
   :: Monad m
-  => Int
-  -> S.Stream (S.Of ([NE.NonEmpty edge], Double)) m r
-  -> S.Stream (S.Of ([edge], Double)) m ()
-queryResultTreeToPathsStream maxCount res = S.take maxCount $
+  => S.Stream (S.Of ([NE.NonEmpty edge], Double)) m r
+  -> S.Stream (S.Of ([edge], Double)) m r
+queryResultTreeToPathsStream res =
     S.concat
     $ S.map (\(nePath, weight) -> map (,weight) . spTreeToPaths $ nePath )
       res

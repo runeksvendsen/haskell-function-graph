@@ -10,7 +10,6 @@ module Server.Pages.Search
 where
 
 import Lucid
-import Control.Monad (forM_)
 import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
@@ -26,17 +25,19 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Encoding as TLE
-import Server.Api (HxBoosted, NoGraph (NoGraph), StreamIO)
+import Server.Api (HxBoosted, NoGraph (NoGraph))
 import Data.String (fromString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Bifunctor (bimap)
 import qualified Control.Monad.Except as ET
 import Server.HtmlStream
 import qualified Streaming.Prelude as S
+import qualified Data.BalancedStream
+import qualified Control.Concurrent as ConcTmp -- WIP
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
-  { searchEnvGraph :: FunGraph.Graph ST.RealWorld
+  { searchEnvGraph :: !(FunGraph.Graph ST.RealWorld)
   , searchEnvVertexLookup :: T.Text -> Maybe FunGraph.FullyQualifiedType
   }
 
@@ -77,15 +78,20 @@ page
   -> Word
   -> Maybe NoGraph
   -> Handler (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
+page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
   eQueryResultStream <- liftIO $ query' (src, dst)
-  queryResultPaths <- either
+  queryResultStream <- either
     (internalError . mkMissingVertexError (src, dst))
     pure
     eQueryResultStream
-  let resultHtml' =
+  queryResultStreamWithAccum <- liftIO $ Data.BalancedStream.returnStreamAccum
+    (S.take maxCount queryResultStream)
+  let queryResultPaths =
+        FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
+  let resultsTable :: HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+      resultsTable = do
         streamTagBalancedM "table" $ do
           streamHtml $ thead_ $
             tr_ $ do
@@ -101,11 +107,15 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
                           intersperse ", " $
                             map mkPackageLink (nubOrd $ map FunGraph._function_package result)
             liftStream $ S.map (f . fst) queryResultPaths
-  -- let resultHtml = if null queryResultPaths then noResultsText (src, dst) else resultHtml'
-  pure (resultHtml', (src, dst))
+      resultGraph accum =
+        ET.lift (mkGraph accum) >>= streamHtml
+  -- WIP: check timeout
+  -- let resultHtml = if S.maps null queryResultPaths then streamHtml $ noResultsText (src, dst) else resultHtml'
+  pure (resultsTable >>= resultGraph, (src, dst))
   where
-    mkErrorText = p_ [style_ "color:red"]
+    maxCount = fromIntegral maxCount'
 
+    mkErrorText = p_ [style_ "color:red"]
     internalError errText =
       throwError $ err500 { errBody = "Internal error: " <> errText }
 
@@ -116,6 +126,26 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
       , fromString (show $ bimap FunGraph.renderFullyQualifiedType FunGraph.renderFullyQualifiedType (src, dst)) <> "."
       , "Please report bug at https://github.com/runeksvendsen/haskell-function-graph/issues."
       ]
+
+    mkGraph
+      :: ET.MonadIO m
+      => [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+      -> m (Html ())
+    mkGraph queryResult = liftIO (ConcTmp.threadDelay 5000000) >> case mNoGraph of -- WIP: debug
+      Just NoGraph -> pure mempty
+      Nothing -> do
+        resultGraphE <- liftIO $ renderResultGraphIO queryResult
+        either
+          (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
+          (const $ pure ())
+          resultGraphE
+        pure $ do
+          h3_ "Result graph"
+          either
+            (const $ mkErrorText "Failed to render result graph")
+            toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+            resultGraphE
+          openSvgInNewWindowBtn
 
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
     noResultsText (src, dst) =
@@ -140,27 +170,12 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
         pure
         (lookupVertex txt)
 
-    query
-      :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
-      -> ST.ST
-          ST.RealWorld
-          (Either
-              (FunGraph.GraphActionError FunGraph.FullyQualifiedType)
-              ([([FunGraph.NonEmpty FunGraph.TypedFunction], Double)],
-              [([FunGraph.TypedFunction], Double)]))
-    query srcDst =
-      FunGraph.runGraphAction graph $
-        FunGraph.queryTreeAndPathsGA
-          (fromIntegral maxCount)
-          srcDst
-
     query' srcDst =
       ET.runExceptT $
-        FunGraph.queryResultTreeToPathsStream (fromIntegral maxCount) <$>
           FunGraph.queryTreeTimeoutIO
             graph
             0.1 -- WIP: don't hardcode
-            (fromIntegral maxCount)
+            maxCount
             srcDst
 
     renderResultGraphIO queryResult =

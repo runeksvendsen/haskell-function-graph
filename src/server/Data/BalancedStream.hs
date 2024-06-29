@@ -13,6 +13,9 @@ module Data.BalancedStream
 , yieldBalanced
 , yieldBalancedM
 , liftStream
+  -- * Generic 'S.Stream' functions
+, appendStreamAccum
+, returnStreamAccum
 )
 where
 
@@ -37,6 +40,12 @@ import qualified Streaming as S
 --  >>> let stream = yieldBalanced "{ " " }" >> yield "a" >> yieldBalanced "[" "]" >> yieldBalanced "(" ")" >> yield "i+1"
 --  >>> concat $ Data.Functor.Identity.runIdentity $ Streaming.Prelude.toList_ (toStream stream)
 -- "{ a[(i+1)] }"
+--
+--  Example 3: Using 'yieldBalancedM':
+--
+-- >>> let stream = yield "BEGIN " >> yieldBalancedM "(" ")" (yield "i+1") >> yield " END"
+-- >>> concat $ Data.Functor.Identity.runIdentity $ Streaming.Prelude.toList_ (toStream stream)
+-- "BEGIN (i+1) END"
 newtype BalancedStream a m r = BalancedStream
   { unBalancedStream :: S.Stream (S.Of a) m (r, [[a]])
     -- ^ The @S.Stream (S.Of a) m r@ is the first part of the stream.
@@ -78,7 +87,7 @@ instance Monad m => Monad (BalancedStream a m) where
       pure (r', state' <> state)
 
 instance MonadTrans (BalancedStream a) where
-  lift s = BalancedStream $ (,[[]]) <$> lift s
+  lift = liftStream . lift
 
 liftStream
   :: Monad m
@@ -112,17 +121,17 @@ yieldBalanced
 yieldBalanced a1 a2 =
   BalancedStream $ (,[[a2]]) <$> S.yield a1
 
--- ^ @yieldBalancedM initial terminating bs@ is just @yieldBalanced a1 a2 >> bs@.
---
---   TODO: allows nesting do-actions inside tags
+-- | TODO: allows @BEFORE { blah } AFTER@ instead of @BEFORE { blah AFTER }@.
 yieldBalancedM
   :: Monad m
   => a -- ^ Initial item
   -> a -- ^ Terminating item
-  -> BalancedStream a m () -- ^ Between initial and terminating item
-  -> BalancedStream a m ()
+  -> BalancedStream a m r -- ^ Between initial and terminating item
+  -> BalancedStream a m r
 yieldBalancedM a1 a2 bs =
-  yieldBalanced a1 a2 >> bs
+  liftStream $
+    toStream $
+      yieldBalanced a1 a2 >> bs
 
 -- | Append an element to the end of a stream based on all previously streamed elements.
 --
@@ -152,3 +161,12 @@ appendStreamAccum mkStream s =
         S.yield (a, accum')
         eitherStream <- lift $ S.inspect fStream
         go accum' eitherStream
+
+-- | Make a stream return all previously streamed elements
+returnStreamAccum
+  :: Monad m
+  => S.Stream (S.Of a) m r
+  -- ^ Original stream
+  -> m (S.Stream (S.Of a) m [a])
+  -- ^ Original stream with a return value of all previously streamed elements
+returnStreamAccum = appendStreamAccum pure
