@@ -215,7 +215,7 @@ queryTreeTimeoutIO'
 queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
   srcVid <- lookupVertex src
   dstVid <- lookupVertex dst
-  let stream = Dijkstra.dijkstraShortestPathsLevelsTimeout runner' maxCount 1 (srcVid, dstVid) timeout -- TODO: factor out "level" arg
+  let stream = Dijkstra.dijkstraShortestPathsLevelsTimeout runner' maxCount 1000 (srcVid, dstVid) timeout -- TODO: factor out "level" arg
       mapStream
         :: S.Of (Dijkstra.TimeBoundedResult ([DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)], Double)) a
         -> S.Of (Dijkstra.TimeBoundedResult ([NE.NonEmpty TypedFunction], Double)) a
