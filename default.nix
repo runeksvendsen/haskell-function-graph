@@ -16,7 +16,7 @@ let
 
   dump-declsSrc = builtins.fetchGit {
     url = "https://github.com/runeksvendsen/dump-decls.git";
-    rev = "8a2cdb42bf6fd8fc2508096a41a980dff0595a87";
+    rev = "1faa909fd541d5cb16a704478433f37b4734da30";
   };
 
   servant-errors =
