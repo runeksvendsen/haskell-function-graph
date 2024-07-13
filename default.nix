@@ -27,17 +27,9 @@ let
     in nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "servant-errors" servant-errorsSrc {};
 
   args =
-    { bellman-ford = nixpkgs.pkgs.haskell.packages.${compiler}.callPackage
-        (nixpkgs.pkgs.haskell.lib.overrideCabal bellman-ford)
-        { };
-
-      dump-decls = nixpkgs.pkgs.haskell.packages.${compiler}.callPackage
-        (nixpkgs.pkgs.haskell.lib.overrideCabal dump-decls)
-        { };
-
-      servant-errors = nixpkgs.pkgs.haskell.packages.${compiler}.callPackage
-        (nixpkgs.pkgs.haskell.lib.overrideCabal servant-errors)
-        { };
+    { bellman-ford = bellman-ford;
+      dump-decls = dump-decls;
+      servant-errors = servant-errors;
     };
 in
   nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "function-graph" ./. args
