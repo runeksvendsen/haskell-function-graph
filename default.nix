@@ -9,7 +9,7 @@ let
       url = "https://github.com/runeksvendsen/bellman-ford.git";
       rev = "8896ea261c29af4b69b6b8b007873c59c886618c";
     };
-    in import (src + "/default.nix") { inherit nixpkgs compiler; };
+    in import src { inherit nixpkgs compiler; };
 
 
   dump-decls =
@@ -18,7 +18,7 @@ let
       rev = "1faa909fd541d5cb16a704478433f37b4734da30";
     };
     in nixpkgs.haskell.lib.setBuildTargets
-      (import (src + "/default.nix") { inherit nixpkgs compiler; })
+      (import src { inherit nixpkgs compiler; })
       ["lib:lib" "test:doctest" "test:unit"];
 
   servant-errors =
