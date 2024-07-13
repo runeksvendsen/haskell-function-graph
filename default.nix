@@ -15,11 +15,11 @@ let
   dump-decls =
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/dump-decls.git";
-      rev = "1faa909fd541d5cb16a704478433f37b4734da30";
+      rev = "e57c43f059e9a4affbeb230dffc8bc5fa733b670";
     };
     in nixpkgs.haskell.lib.setBuildTargets
       (import src { inherit nixpkgs compiler; })
-      ["lib:lib" "test:doctest" "test:unit"];
+      ["lib:dump-decls" "test:doctest" "test:unit"];
 
   servant-errors =
     let src = builtins.fetchGit {
