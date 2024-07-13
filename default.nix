@@ -4,27 +4,29 @@
 , compiler ? "ghc92"
 }:
 let
-  bellman-ford = import (bellman-fordSrc + "/default.nix") { inherit nixpkgs compiler; };
-  bellman-fordSrc = builtins.fetchGit {
-    url = "https://github.com/runeksvendsen/bellman-ford.git";
-    rev = "8896ea261c29af4b69b6b8b007873c59c886618c";
-  };
+  bellman-ford =
+    let src = builtins.fetchGit {
+      url = "https://github.com/runeksvendsen/bellman-ford.git";
+      rev = "8896ea261c29af4b69b6b8b007873c59c886618c";
+    };
+    in import (src + "/default.nix") { inherit nixpkgs compiler; };
 
-  dump-decls = nixpkgs.haskell.lib.setBuildTargets
-    (import (dump-declsSrc + "/default.nix") { inherit nixpkgs compiler; })
-    ["lib:lib" "test:doctest" "test:unit"];
 
-  dump-declsSrc = builtins.fetchGit {
-    url = "https://github.com/runeksvendsen/dump-decls.git";
-    rev = "1faa909fd541d5cb16a704478433f37b4734da30";
-  };
+  dump-decls =
+    let src = builtins.fetchGit {
+      url = "https://github.com/runeksvendsen/dump-decls.git";
+      rev = "1faa909fd541d5cb16a704478433f37b4734da30";
+    };
+    in nixpkgs.haskell.lib.setBuildTargets
+      (import (src + "/default.nix") { inherit nixpkgs compiler; })
+      ["lib:lib" "test:doctest" "test:unit"];
 
   servant-errors =
-    let servant-errorsSrc = builtins.fetchGit {
-          url = "https://github.com/epicallan/servant-errors.git";
-          rev = "7c564dff3574c35cae721b711bd90503b851438e";
-        };
-    in nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "servant-errors" servant-errorsSrc {};
+    let src = builtins.fetchGit {
+      url = "https://github.com/epicallan/servant-errors.git";
+      rev = "7c564dff3574c35cae721b711bd90503b851438e";
+    };
+    in nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "servant-errors" src {};
 
   args =
     { bellman-ford = bellman-ford;
