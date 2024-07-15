@@ -31,4 +31,6 @@ let
       servant-errors = servant-errors;
     };
 in
-  nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "function-graph" ./. args
+  nixpkgs.pkgs.haskell.lib.doBenchmark (
+    nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "function-graph" ./. args
+  )
