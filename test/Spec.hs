@@ -51,7 +51,7 @@ main =
 main'
   :: Bool
   -> FunGraph.Graph ST.RealWorld
-  -> IO Hspec.Spec
+  -> IO HSpec.Spec
 main' shouldTrace graph = do
   graphEdgeSet <- ST.stToIO (DG.toEdges graph)
   let graphEdges = Set.map void $ Set.fromList $ concat $ Set.map (NE.toList . DG.eMeta) graphEdgeSet
