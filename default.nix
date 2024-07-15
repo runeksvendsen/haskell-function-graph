@@ -1,5 +1,4 @@
 # TODO: runtime dep "graphviz"
-# TODO: make "dump-decls" build by not running the "test" test suite
 { nixpkgs ? (import ./nix/pkgs.nix).pkgs
 , compiler ? "ghc92"
 }:
@@ -12,14 +11,12 @@ let
     in import src { inherit nixpkgs compiler; };
 
 
-  dump-decls =
+  dump-decls-lib =
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/dump-decls.git";
-      rev = "e57c43f059e9a4affbeb230dffc8bc5fa733b670";
+      rev = "496fc63c1279aedcdf7143c5ea85970e63a2ba0a";
     };
-    in nixpkgs.haskell.lib.setBuildTargets
-      (import src { inherit nixpkgs compiler; })
-      ["lib:dump-decls" "test:doctest" "test:unit"];
+    in import (src + "/dump-decls-lib") { inherit nixpkgs compiler; };
 
   servant-errors =
     let src = builtins.fetchGit {
@@ -30,7 +27,7 @@ let
 
   args =
     { bellman-ford = bellman-ford;
-      dump-decls = dump-decls;
+      dump-decls-lib = dump-decls-lib;
       servant-errors = servant-errors;
     };
 in

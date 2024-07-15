@@ -23,7 +23,7 @@ library
     build-depends:    base
                     , hashable
                     , bellman-ford
-                    , dump-decls:dump-decls
+                    , dump-decls-lib
                     , aeson
                     , bytestring
                     , text
