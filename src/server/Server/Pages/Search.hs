@@ -33,7 +33,6 @@ import qualified Control.Monad.Except as ET
 import Server.HtmlStream
 import qualified Streaming.Prelude as S
 import qualified Data.BalancedStream
-import qualified Control.Concurrent as ConcTmp -- WIP
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -131,7 +130,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
       :: ET.MonadIO m
       => [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
       -> m (Html ())
-    mkGraph queryResult = liftIO (ConcTmp.threadDelay 5000000) >> case mNoGraph of -- WIP: debug
+    mkGraph queryResult = case mNoGraph of
       Just NoGraph -> pure mempty
       Nothing -> do
         resultGraphE <- liftIO $ renderResultGraphIO queryResult
