@@ -18,10 +18,11 @@ import Servant.API
 import Servant.API.Stream
 import Servant.Types.SourceT
 import qualified Streaming as S
+import qualified Streaming.Prelude as S
 import Servant.HTML.Lucid (HTML)
 import Lucid (Html)
 import qualified Data.Text as T
-import Server.HtmlStream (HtmlStream, toStream)
+import Server.HtmlStream (HtmlStream, toStream, liftStream)
 
 type Api = Root :<|> Search :<|> Typeahead
 
@@ -73,5 +74,22 @@ instance Servant.API.Stream.ToSourceIO a (StreamIO a) where
             Right (a S.:> s') -> pure $ Yield a (go s')
     in fromStepT $ go stream
 
+instance Servant.API.Stream.FromSourceIO a (StreamIO a) where
+  fromSourceIO (SourceT m) =
+    S.effect $ m (pure . stepToStream)
+    where
+      stepToStream :: StepT IO a -> S.Stream (S.Of a) IO ()
+      stepToStream =
+        let go = \case
+              Stop -> pure ()
+              Error err -> S.lift $ fail err
+              Skip s -> go s
+              Yield x s -> S.yield x >> go s
+              Effect ms -> S.lift ms >>= go
+        in go
+
 instance Servant.API.Stream.ToSourceIO (Html ()) (HtmlStream IO ()) where
   toSourceIO = toSourceIO . Server.HtmlStream.toStream
+
+instance Servant.API.Stream.FromSourceIO (Html ()) (HtmlStream IO ()) where
+  fromSourceIO = Server.HtmlStream.liftStream . fromSourceIO

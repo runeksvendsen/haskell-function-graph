@@ -15,6 +15,7 @@ import qualified Server
 
 import Servant.API.ContentTypes
 import qualified Servant.Client
+import qualified Servant.Client.Streaming
 import qualified Lucid
 import Servant.HTML.Lucid (HTML)
 import Criterion.Main
@@ -31,6 +32,9 @@ import qualified Control.Concurrent as MVar
 import qualified Control.Concurrent as Conc
 import Data.Functor (void)
 import qualified Control.Concurrent.Async as Async
+import Server.HtmlStream (HtmlStream, toStream)
+import qualified Streaming.Prelude
+import Control.Monad.IO.Class (liftIO)
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -95,7 +99,7 @@ runTests port = do
             (Just $ fromIntegral maxCount)
             mNoGraph
       in bench (FunGraph.Test.queryTest_name qt <> " maxCount=" <> show maxCount) $
-        nfIO $ Servant.Client.runClientM clientM clientEnv >>= either Ex.throwIO pure
+        nfIO $ Servant.Client.Streaming.runClientM clientM clientEnv >>= either Ex.throwIO pure
 
 searchClientM
   :: Maybe Server.Api.HxBoosted -- HX-Boosted header
@@ -103,13 +107,30 @@ searchClientM
   -> Maybe T.Text -- dst
   -> Maybe Word -- limit
   -> Maybe Server.Api.NoGraph -- don't draw graph?
-  -> Servant.Client.ClientM BSL.ByteString
+  -> Servant.Client.Streaming.ClientM BSL.ByteString
 searchClientM hxBoosted mSrc mDst mLimit mNoGraph =
   Lucid.renderBS <$>
-    Servant.Client.client searchApi hxBoosted mSrc mDst mLimit mNoGraph
+    (queryApi hxBoosted mSrc mDst mLimit mNoGraph >>= consumeHtmlStream)
   where
+    queryApi
+      :: Maybe Server.Api.HxBoosted
+      -> Maybe T.Text
+      -> Maybe T.Text
+      -> Maybe Word
+      -> Maybe Server.Api.NoGraph
+      -> Servant.Client.Streaming.ClientM (HtmlStream IO ())
+    queryApi =
+      Servant.Client.Streaming.client searchApi
+
     searchApi :: Proxy Server.Api.Search
     searchApi = Proxy
+
+    consumeHtmlStream
+      :: HtmlStream IO ()
+      -> Servant.Client.Streaming.ClientM (Lucid.Html ())
+    consumeHtmlStream stream = do
+      res Streaming.Prelude.:> () <- liftIO $ Streaming.Prelude.mconcat (Server.HtmlStream.toStream stream)
+      pure res
 
 instance MimeUnrender HTML (Lucid.Html ()) where
    mimeUnrender _ = Right . Lucid.toHtmlRaw

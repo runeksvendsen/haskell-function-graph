@@ -129,6 +129,7 @@ benchmark benchmark-web
     , streaming-commons
     , wai
     , async
+    , streaming
   default-language: Haskell2010
   ghc-options: -threaded
                -O2
