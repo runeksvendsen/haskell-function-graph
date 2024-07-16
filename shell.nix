@@ -4,6 +4,7 @@ pkgs.mkShell {
     pkgs.haskell.compiler.ghc90
     release-21-05.cabal-install
     pkgs.zlib.dev
+    pkgs.pkg-config
     pkgs.git
     pkgs.graphviz
     pkgs.gnused # TODO.sh depends on GNU grep
