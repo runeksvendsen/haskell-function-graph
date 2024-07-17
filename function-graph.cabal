@@ -134,6 +134,7 @@ benchmark benchmark-web
   ghc-options: -threaded
                -O2
 
+-- TODO: Add integration test that runs a server like `benchmark-web`
 test-suite function-graph-test
   import: warnings
   type: exitcode-stdio-1.0
