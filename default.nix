@@ -1,4 +1,3 @@
-# TODO: runtime dep "graphviz"
 { nixpkgs ? (import ./nix/pkgs.nix).pkgs
 , compiler ? "ghc92"
 }:
@@ -30,7 +29,18 @@ let
       dump-decls-lib = dump-decls-lib;
       servant-errors = servant-errors;
     };
-in
-  nixpkgs.pkgs.haskell.lib.doBenchmark (
+
+  function-graph = nixpkgs.pkgs.haskell.lib.doBenchmark (
     nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "function-graph" ./. args
-  )
+  );
+
+  function-graph-server-wrapped = nixpkgs.runCommand "server-wrapped" {
+      buildInputs = [ nixpkgs.makeWrapper ];
+    }
+    ''
+        mkdir -p $out/bin
+        makeWrapper ${function-graph}/bin/server $out/bin/server-wrapped \
+          --set PATH ${nixpkgs.lib.makeBinPath [ nixpkgs.graphviz ]}
+    '';
+in
+  function-graph-server-wrapped
