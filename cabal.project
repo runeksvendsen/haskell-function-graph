@@ -26,3 +26,5 @@ source-repository-package
     type: git
     location: https://github.com/epicallan/servant-errors.git
     tag: 7c564dff3574c35cae721b711bd90503b851438e
+
+index-state: hackage.haskell.org 2024-07-12T21:46:06Z
