@@ -1,98 +1,101 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE DataKinds     #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 module Main (main) where
 
-import qualified FunGraph
-import qualified FunGraph.Util
-import qualified System.Environment as Env
-import qualified Control.Monad.ST as ST
-import qualified Data.Graph.Digraph as DG
-import qualified System.Timeout
-import Control.Monad (when, forM_)
-import Data.Maybe (fromMaybe)
-import Text.Read (readMaybe)
-import qualified Data.Set as Set
-import qualified System.Console.ANSI as ANSI
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Text as T
-import qualified FunGraph.Types as Types
+import           Control.Concurrent
+                 (threadDelay)
+import           Control.Monad.IO.Class
+                 (MonadIO (..))
 
-buildConfig :: FunGraph.BuildConfig
-buildConfig = FunGraph.emptyBuildConfig
-  { FunGraph.buildConfig_excludeTypes = Set.fromList $ map Types.parsePprTyConSingleton
-      [ "[ghc-prim-0.10.0:GHC.Types.Char]"
-      , "[[ghc-prim-0.10.0:GHC.Types.Char]]"
-      , "base-4.18.0.0:GHC.Real.Ratio ghc-bignum-1.3:GHC.Num.Integer.Integer"
-      , "scientific-0.3.7.0:Data.Scientific.Scientific"
-      , "bytestring-0.11.4.0:Data.ByteString.Builder.Internal.Builder"
-      , "[base-4.18.0.0:GHC.Word.Word8]"
-      , "[ghc-prim-0.10.0:GHC.Types.Bool]"
-      , "base-4.18.0.0:GHC.Maybe.Maybe ghc-prim-0.10.0:GHC.Types.Bool"
+import           Data.Maybe
+                 (fromMaybe)
+
+import           Network.Wai
+                 (Application)
+import           System.Environment
+                 (getArgs, lookupEnv)
+import           Text.Read
+                 (readMaybe)
+
+import           Servant
+
+import qualified Servant.Types.SourceT as S
+import Lucid
+
+import qualified Network.Wai.Handler.Warp     as Warp
+import qualified Data.Text as T
+import Data.Functor.Identity (Identity)
+import qualified Data.Text.Lazy as LT
+-- import Servant.HTML.Lucid (HTML)
+import qualified Data.List.NonEmpty as NE
+import           Data.Typeable      (Typeable)
+import           Lucid              (ToHtml (..), renderBS)
+import qualified Network.HTTP.Media as M
+import           Servant.API        (Accept (..), MimeRender (..))
+import qualified Data.Text.Encoding as TE
+import qualified Data.Text.Lazy.Encoding as LTE
+
+data HTML deriving Typeable
+
+-- | @text/html;charset=utf-8@
+instance Accept HTML where
+    contentTypes _ =
+      "text" M.// "html" M./: ("charset", "utf-8") NE.:|
+      ["text" M.// "html"]
+
+instance MimeRender HTML T.Text where
+    mimeRender _ = LTE.encodeUtf8 . LT.fromStrict
+
+type API =
+    Get '[HTML] T.Text
+    :<|> "slow" :> Capture "num" Int :> StreamGet NewlineFraming HTML (SourceIO T.Text)
+
+api :: Proxy API
+api = Proxy
+
+server :: Server API
+server =
+    root :<|> slow
+  where
+    root = pure $ T.unlines
+      [ "<html>"
+      , "<head>"
+      , "<script src=\"https://unpkg.com/htmx.org@2.0.1\" integrity=\"sha384-QWGpdj554B4ETpJJC9z+ZHJcA/i59TyjxEPXiiUgN2WmTyV5OEZWCD6gQhgkdpB/\" crossorigin=\"anonymous\"></script>"
+      , "</head>"
+      , "<body>"
+      , "<a href=\"slow\""
       ]
-  , FunGraph.buildConfig_excludeTypesUnqualified = Set.fromList
-      [ "String"
-      , "Char"
-      , "FastString"
-      , "ShortByteString"
-      , "Bool"
-      , "Bool#"
-      , "Int"
-      , "Int32"
-      , "Int64"
-      , "Word"
-      , "Word8"
-      , "Word16"
-      , "Word32"
-      , "Word64"
-      , "Float"
-      , "Double"
-      , "Integer"
-      , "ByteString"
-      , "Text"
-      , "ByteArray#"
-      ]
-  , FunGraph.buildConfig_excludeModulePatterns = Set.fromList
-      [ "Foreign.C.Types" -- TODO: verify that this works (it seems to not work)
-      , "Codec.CBOR"
-      ]
-  }
+
+    slow n = liftIO $ do
+        putStrLn $ "/slow/" ++ show n
+        return $ slowSource n
+
+    slowSource :: Int -> S.SourceT IO T.Text
+    slowSource num =
+      let go :: Int -> S.StepT IO T.Text
+          go !n
+            | n == num =
+                S.Yield "</ol></body></html>" S.Stop
+            | otherwise = S.Effect $ do
+                threadDelay 500000
+                pure $ S.Yield (LT.toStrict $ renderText $ resultItem n) (go (n+1))
+
+          resultItem :: Int -> Html ()
+          resultItem n = li_ $ a_ [href_ "todo"] (toHtml $ "result " <> T.pack (show n))
+      in S.fromStepT $ S.Yield "<html><body><ol>" (go 1)
+
+app :: Application
+app = serve api server
 
 main :: IO ()
 main = do
-  [fileName, timoutMillisStr] <- Env.getArgs
-  timoutMillis <- maybe (fail $ "Invalid timeout: " <> show timoutMillisStr) pure (readMaybe timoutMillisStr)
-  FunGraph.withGraphFromFile (FunGraph.defaultBuildConfig <> buildConfig) fileName $ \graph -> do
-    vertices <- ST.stToIO $ DG.vertexLabels graph
-    forM_ vertices $ \src ->
-      forM_ vertices $ \dst -> do
-        res <- query timoutMillis graph src dst
-        case res of
-          [] -> pure ()
-          (fns,_):_ -> when (length fns > 9) $ do
-            putStrLn . ((show (length fns) <> " ") <>) $
-              let fns' = map NE.head fns
-              in mconcat
-                [ color ANSI.Green $
-                    T.unpack $
-                      FunGraph.renderFullyQualifiedType src <> " -> " <> FunGraph.renderFullyQualifiedType dst
-                , " : "
-                , color ANSI.Red $ renderTypeSig fns'
-                , " : "
-                , color ANSI.Blue $ FunGraph.renderComposedFunctionsStr fns'
-                ]
-  where
-    maxCount = 1
-
-    renderTypeSig = T.unpack . FunGraph.Util.showTypeSig . FunGraph.Util.typedFunctionsPathTypes
-
-    query timoutMillis graph src dst = fmap (fromMaybe []) $
-      System.Timeout.timeout (timoutMillis * 1000) $
-        ST.stToIO $
-          fmap (either (error . show) id) $
-            FunGraph.runGraphAction graph $ FunGraph.queryTreeGA maxCount (src, dst)
-
-    color :: ANSI.Color -> String -> String
-    color color' str = concat
-        [ ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Dull color']
-        , str
-        , ANSI.setSGRCode [ANSI.Reset]
-        ]
+  putStrLn "Starting cookbook-basic-streaming at http://localhost:8000"
+  port <- fromMaybe 8000 . (>>= readMaybe) <$> lookupEnv "PORT"
+  Warp.run port app
