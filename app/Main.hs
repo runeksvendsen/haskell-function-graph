@@ -55,14 +55,15 @@ instance MimeRender HTML T.Text where
 
 type API =
     Get '[HTML] T.Text
-    :<|> "slow" :> Capture "num" Int :> StreamGet NewlineFraming HTML (SourceIO T.Text)
+    :<|> "slow" :> StreamGet NewlineFraming HTML (SourceIO T.Text)
+    :<|> "slown" :> Capture "num" Int :> StreamGet NewlineFraming HTML (SourceIO T.Text)
 
 api :: Proxy API
 api = Proxy
 
 server :: Server API
 server =
-    root :<|> slow
+    root :<|> slow 5 :<|> slow
   where
     root = pure $ T.unlines
       [ "<html>"
@@ -70,7 +71,12 @@ server =
       , "<script src=\"https://unpkg.com/htmx.org@2.0.1\" integrity=\"sha384-QWGpdj554B4ETpJJC9z+ZHJcA/i59TyjxEPXiiUgN2WmTyV5OEZWCD6gQhgkdpB/\" crossorigin=\"anonymous\"></script>"
       , "</head>"
       , "<body>"
-      , "<a href=\"slow\""
+      , "<a href=\"/slow\">Regular link to /slow</a>"
+      , "<br>"
+      , "<a href=\"/slow\" hx-boost=\"true\" hx-target=\"#results\">Boosted link to /slow</a>"
+      , "<div id=\"results\">result div</div>"
+      , "</body>"
+      , "</html>"
       ]
 
     slow n = liftIO $ do
@@ -81,7 +87,7 @@ server =
     slowSource num =
       let go :: Int -> S.StepT IO T.Text
           go !n
-            | n == num =
+            | n > num =
                 S.Yield "</ol></body></html>" S.Stop
             | otherwise = S.Effect $ do
                 threadDelay 500000
