@@ -56,6 +56,7 @@ instance MimeRender HTML T.Text where
 type API =
     Get '[HTML] T.Text
     :<|> "slow" :> StreamGet NewlineFraming HTML (SourceIO T.Text)
+    :<|> "search" :> QueryParam "query" String :> StreamGet NewlineFraming HTML (SourceIO T.Text)
     :<|> "slown" :> Capture "num" Int :> StreamGet NewlineFraming HTML (SourceIO T.Text)
 
 api :: Proxy API
@@ -63,18 +64,26 @@ api = Proxy
 
 server :: Server API
 server =
-    root :<|> slow 5 :<|> slow
+    root :<|> slow 10 :<|> (\_ -> slow 10) :<|> slow
   where
     root = pure $ T.unlines
       [ "<html>"
       , "<head>"
       , "<script src=\"https://unpkg.com/htmx.org@2.0.1\" integrity=\"sha384-QWGpdj554B4ETpJJC9z+ZHJcA/i59TyjxEPXiiUgN2WmTyV5OEZWCD6gQhgkdpB/\" crossorigin=\"anonymous\"></script>"
       , "</head>"
+
       , "<body>"
       , "<a href=\"/slow\">Regular link to /slow</a>"
       , "<br>"
-      , "<a href=\"/slow\" hx-boost=\"true\" hx-target=\"#results\">Boosted link to /slow</a>"
-      , "<div id=\"results\">result div</div>"
+      , "<br>"
+      , "<a href=\"/slow\" hx-boost=\"true\">Boosted link to /slow</a>"
+      , "<br>"
+      , "<br>"
+      , "<a href=\"/slow\" hx-boost=\"true\" hx-target=\"#results\">Boosted link to /slow with hx-target=#results</a>"
+      , "<br>"
+      , "<br>"
+      , "<div id=\"results\">#results div</div>"
+
       , "</body>"
       , "</html>"
       ]

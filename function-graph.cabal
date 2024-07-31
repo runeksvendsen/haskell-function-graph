@@ -93,6 +93,16 @@ executable function-graph
     main-is:          Main.hs
     hs-source-dirs:   app
     build-depends:    base, function-graph, bellman-ford, containers, ansi-terminal, text
+                    , streaming
+                    , lucid
+                    , lucid-htmx
+                    , servant-lucid
+                    , servant
+                    , servant-server
+                    , wai
+                    , warp
+                    , text
+                    , http-media
     default-language: Haskell2010
 
 benchmark benchmark-lib
