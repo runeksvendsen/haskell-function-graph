@@ -12,7 +12,7 @@ import qualified Server.Api
 import qualified FunGraph
 import qualified FunGraph.Test
 import qualified Server
-
+import qualified Server.Pages.Search
 import Servant.API.ContentTypes
 import qualified Servant.Client
 import qualified Servant.Client.Streaming
@@ -30,11 +30,16 @@ import qualified Network.Wai
 import qualified Control.Exception as Ex
 import qualified Control.Concurrent as MVar
 import qualified Control.Concurrent as Conc
-import Data.Functor (void)
+import Data.Functor (void, (<&>))
 import qualified Control.Concurrent.Async as Async
 import Server.HtmlStream (HtmlStream, toStream)
+import Streaming.Prelude (Stream, Of)
 import qualified Streaming.Prelude
 import Control.Monad.IO.Class (liftIO)
+import qualified Data.ByteString as BS
+import Lucid.Base (Html)
+import qualified Lucid.Base
+import qualified Data.Text.Lazy as LT
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -68,14 +73,16 @@ runTests port = do
   manager <- Network.HTTP.Client.newManager $
     setResponseTimeoutSeconds 60 Network.HTTP.Client.defaultManagerSettings
   defaultMain
-    [ bgroup "Web server"
-      [ bgroup "search"
-        [ bgroup "with graph" $
-            map (benchHttpRequest manager Nothing) FunGraph.Test.allTestCases
-        , bgroup "without graph" $
-            map (benchHttpRequest manager (Just Server.Api.NoGraph)) FunGraph.Test.allTestCases
-        ]
-      ]
+    [ bgroup "Web server" $
+      [ ("(all results)", id)
+      , ("(first result)", untilFirstResult) -- WIP: verify this actually works
+      ] <&> \(postFix, modifyStream) ->
+        bgroup ("search " ++ postFix)
+          [ bgroup "with graph" $
+              map (benchHttpRequest modifyStream manager Nothing) FunGraph.Test.allTestCases
+          , bgroup "without graph" $
+              map (benchHttpRequest modifyStream manager (Just Server.Api.NoGraph)) FunGraph.Test.allTestCases
+          ]
     ]
   where
     setResponseTimeoutSeconds seconds settings =
@@ -86,13 +93,19 @@ runTests port = do
       in Servant.Client.ClientEnv manager baseUrl' Nothing Servant.Client.defaultMakeClientRequest
 
     benchHttpRequest
-      :: Network.HTTP.Client.Manager
+      :: (Stream (Of (Html ())) IO () -> Stream (Of (Html ())) IO ())
+      -> Network.HTTP.Client.Manager
       -> Maybe Server.Api.NoGraph
       -> FunGraph.Test.QueryTest -> Benchmark
-    benchHttpRequest manager mNoGraph qt =
-      let (maxCount, (src, dst)) = FunGraph.Test.queryTest_args qt
+    benchHttpRequest modifyStream manager mNoGraph qt =
+      let htmlStreamToStream stream = do
+            res Streaming.Prelude.:> () <- liftIO $ Streaming.Prelude.mconcat $
+              modifyStream $ Server.HtmlStream.toStream stream
+            pure res
+          (maxCount, (src, dst)) = FunGraph.Test.queryTest_args qt
           clientEnv = mkClientEnv manager
           clientM = searchClientM
+            htmlStreamToStream
             Nothing -- TODO: also bench 'HX-Boosted'?
             (Just $ FunGraph.renderFullyQualifiedType src)
             (Just $ FunGraph.renderFullyQualifiedType dst)
@@ -101,14 +114,24 @@ runTests port = do
       in bench (FunGraph.Test.queryTest_name qt <> " maxCount=" <> show maxCount) $
         nfIO $ Servant.Client.Streaming.runClientM clientM clientEnv >>= either Ex.throwIO pure
 
+    untilFirstResult
+      :: Stream (Of (Html ())) IO ()
+      -> Stream (Of (Html ())) IO ()
+    untilFirstResult = do
+      let Lucid.Base.Attribute resultHtmlAttributeText _ = Server.Pages.Search.mkResultAttribute ""
+          containsSearchResult :: Lucid.Html () -> Bool
+          containsSearchResult = LT.isInfixOf (LT.fromStrict resultHtmlAttributeText) . Lucid.renderText
+      Streaming.Prelude.takeWhile (not . containsSearchResult)
+
 searchClientM
-  :: Maybe Server.Api.HxBoosted -- HX-Boosted header
+  :: (HtmlStream IO () -> Servant.Client.Streaming.ClientM (Lucid.Html ()))
+  -> Maybe Server.Api.HxBoosted -- HX-Boosted header
   -> Maybe T.Text -- src
   -> Maybe T.Text -- dst
   -> Maybe Word -- limit
   -> Maybe Server.Api.NoGraph -- don't draw graph?
   -> Servant.Client.Streaming.ClientM BSL.ByteString
-searchClientM hxBoosted mSrc mDst mLimit mNoGraph =
+searchClientM consumeHtmlStream hxBoosted mSrc mDst mLimit mNoGraph =
   Lucid.renderBS <$>
     (queryApi hxBoosted mSrc mDst mLimit mNoGraph >>= consumeHtmlStream)
   where
@@ -124,13 +147,6 @@ searchClientM hxBoosted mSrc mDst mLimit mNoGraph =
 
     searchApi :: Proxy Server.Api.Search
     searchApi = Proxy
-
-    consumeHtmlStream
-      :: HtmlStream IO ()
-      -> Servant.Client.Streaming.ClientM (Lucid.Html ())
-    consumeHtmlStream stream = do
-      res Streaming.Prelude.:> () <- liftIO $ Streaming.Prelude.mconcat (Server.HtmlStream.toStream stream)
-      pure res
 
 instance MimeUnrender HTML (Lucid.Html ()) where
    mimeUnrender _ = Right . Lucid.toHtmlRaw

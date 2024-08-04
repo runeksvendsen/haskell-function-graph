@@ -6,6 +6,8 @@ module Server.Pages.Search
 ( page
 , handler, HandlerType
 , SearchEnv, createSearchEnv
+  -- * Testing/benchmarking
+, mkResultAttribute
 )
 where
 
@@ -87,7 +89,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
     eQueryResultStream
   queryResultStreamWithAccum <- liftIO $ Data.BalancedStream.returnStreamAccum
     (S.take maxCount queryResultStream)
-  let queryResultPaths =
+  let queryResultPaths = S.map fst $
         FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
   let resultsTable :: HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
       resultsTable = do
@@ -97,15 +99,17 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
               td_ "Function composition"
               td_ "Dependencies"
           streamTagBalancedM "tbody" $ do
-            let f :: [FunGraph.TypedFunction] -> Html ()
-                f result =
-                    tr_ $ do
+            let f :: ([FunGraph.TypedFunction], Word) -> Html ()
+                f (result, resultNumber) =
+                    tr_ [mkResultAttribute (T.pack $ show resultNumber)] $ do
                       td_ $ renderResult result
                       td_ $
                         mconcat $
                           intersperse ", " $
                             map mkPackageLink (nubOrd $ map FunGraph._function_package result)
-            liftStream $ S.map (f . fst) queryResultPaths
+            let queryResultPathsWithResultNumber =
+                  S.zip queryResultPaths (S.enumFrom 1)
+            liftStream $ S.map f queryResultPathsWithResultNumber
       resultGraph accum =
         ET.lift (mkGraph accum) >>= streamHtml
   -- WIP: check timeout
@@ -210,6 +214,10 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
             , "background-color: rgb(200, 200, 200)"
             ]
       in span_ [style]
+
+-- | Exported for benchmarking purposes: marks the actual results in the HTML so we can benchmark e.g. "time to first result"
+mkResultAttribute :: T.Text -> Attribute
+mkResultAttribute = data_ "result-number"
 
 openSvgInNewWindowBtn :: Html ()
 openSvgInNewWindowBtn = do
