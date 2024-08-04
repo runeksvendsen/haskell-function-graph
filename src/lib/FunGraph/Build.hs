@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
 module FunGraph.Build
   ( fileReadDeclarationMap
   , withGraphFromFile
