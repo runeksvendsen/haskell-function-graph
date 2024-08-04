@@ -73,16 +73,10 @@ server =
       , "</head>"
 
       , "<body>"
-      , "<a href=\"/slow\">Regular link to /slow</a>"
+      , "<a href=\"/search?query=foo\">Regular link to /search</a>"
       , "<br>"
       , "<br>"
-      , "<a href=\"/slow\" hx-boost=\"true\">Boosted link to /slow</a>"
-      , "<br>"
-      , "<br>"
-      , "<a href=\"/slow\" hx-boost=\"true\" hx-target=\"#results\">Boosted link to /slow with hx-target=#results</a>"
-      , "<br>"
-      , "<br>"
-      , "<div id=\"results\">#results div</div>"
+      , "<a href=\"/search?query=foo\" hx-boost=\"true\">Boosted link to /search</a>"
 
       , "</body>"
       , "</html>"
@@ -104,7 +98,7 @@ server =
 
           resultItem :: Int -> Html ()
           resultItem n = li_ $ a_ [href_ "todo"] (toHtml $ "result " <> T.pack (show n))
-      in S.fromStepT $ S.Yield "<html><body><ol>" (go 1)
+      in S.fromStepT $ S.Yield "<html><body><h1>Results</h1><ol>" (go 1)
 
 app :: Application
 app = serve api server
