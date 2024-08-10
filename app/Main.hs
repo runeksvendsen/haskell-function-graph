@@ -69,14 +69,21 @@ server =
     root = pure $ T.unlines
       [ "<html>"
       , "<head>"
-      , "<script src=\"https://unpkg.com/htmx.org@2.0.1\" integrity=\"sha384-QWGpdj554B4ETpJJC9z+ZHJcA/i59TyjxEPXiiUgN2WmTyV5OEZWCD6gQhgkdpB/\" crossorigin=\"anonymous\"></script>"
+      , "<script src=\"https://unpkg.com/htmx.org@1.9.6\" integrity=\"sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni\" crossorigin=\"anonymous\"></script>"
+      , "<script src=\"https://unpkg.com/htmx.ext...chunked-transfer/dist/index.js\" integrity=\"sha384-rfvoiWZLab/TZqyI+AMzYNCuqPr24Eyki2rZ4yPm/UkkOgMdiXLAU4nHAz7oi99t\" crossorigin=\"anonymous\"></script>"
       , "</head>"
 
-      , "<body>"
+      , "<body hx-ext=\"chunked-transfer\">"
       , "<a href=\"/search?query=foo\">Regular link to /search</a>"
       , "<br>"
       , "<br>"
       , "<a href=\"/search?query=foo\" hx-boost=\"true\">Boosted link to /search</a>"
+      , "<br>"
+      , "<br>"
+      , "<a href=\"/search?query=foo\" hx-boost=\"true\" hx-target=\"#target\">Boosted link to /search with target DIV</a>"
+      , "<br>"
+      , "<br>"
+      , "<div id=\"target\"></div>"
 
       , "</body>"
       , "</html>"
