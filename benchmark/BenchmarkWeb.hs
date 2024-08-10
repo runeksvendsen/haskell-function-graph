@@ -36,7 +36,6 @@ import Server.HtmlStream (HtmlStream, toStream)
 import Streaming.Prelude (Stream, Of)
 import qualified Streaming.Prelude
 import Control.Monad.IO.Class (liftIO)
-import qualified Data.ByteString as BS
 import Lucid.Base (Html)
 import qualified Lucid.Base
 import qualified Data.Text.Lazy as LT
