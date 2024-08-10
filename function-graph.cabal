@@ -140,7 +140,7 @@ test-suite function-graph-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test
-  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
   build-depends:
       base
     , function-graph
