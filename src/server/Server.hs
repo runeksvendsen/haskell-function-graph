@@ -99,6 +99,12 @@ mkHandlers appendToHead graph = do
       , "  integrity=\"sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV\""
       , "  crossorigin=\"anonymous\""
       , "></script>"
+
+      , "<script"
+      , "  src=\"https://unpkg.com/htmx.ext...chunked-transfer/dist/index.js\""
+      , "  integrity=\"sha384-rfvoiWZLab/TZqyI+AMzYNCuqPr24Eyki2rZ4yPm/UkkOgMdiXLAU4nHAz7oi99t\""
+      , "  crossorigin=\"anonymous\""
+      , "></script>"
       ]
 
 data Handlers = Handlers

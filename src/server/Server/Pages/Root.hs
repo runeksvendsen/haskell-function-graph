@@ -37,7 +37,7 @@ page appendToHead initialSuggestions (searchResult, mSrcDst) = do
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-  streamTagBalancedM "body" $ do
+  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do
     let targetId = "search_result"
     streamHtml $ do
       h1_ "Search for compositions of functions"
