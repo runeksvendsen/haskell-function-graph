@@ -5,9 +5,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 -- | A stream where an item streamed earlier in the stream
---   must be terminated by an item streamed later in the stream
+--   must be terminated by an item streamed later in the stream.
+--
+--   See 'BalancedStream' for an example.
 module Data.BalancedStream
-( BalancedStream
+( -- * @BalancedStream@
+  BalancedStream
 , toStream
 , yield
 , yieldBalanced
@@ -17,6 +20,8 @@ module Data.BalancedStream
 , appendStreamAccum
 , returnStreamAccum
 , timeoutStream
+  -- * Re-exports
+, S.Stream, S.Of
 )
 where
 
