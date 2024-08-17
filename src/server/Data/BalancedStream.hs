@@ -16,6 +16,7 @@ module Data.BalancedStream
   -- * Generic 'S.Stream' functions
 , appendStreamAccum
 , returnStreamAccum
+, timeoutStream
 )
 where
 
@@ -23,6 +24,9 @@ import qualified Streaming.Prelude as S
 import Data.Bifunctor (first)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Streaming as S
+import qualified GHC.Clock
+import qualified System.Timeout
+import Data.Word (Word64)
 
 -- | A stream where an item streamed earlier in the stream
 --   must be terminated by an item streamed later in the stream.
@@ -170,3 +174,41 @@ returnStreamAccum
   -> m (S.Stream (S.Of a) m [a])
   -- ^ Original stream with a return value of all previously streamed elements
 returnStreamAccum = appendStreamAccum pure
+
+-- | 'System.Timeout.timeout' for streams.
+--
+-- Limit a stream to the elements that are produced within the specified timeout.
+--
+-- Example:
+--
+-- >>> :set -XNumericUnderscores
+-- >>> import qualified Streaming.Prelude as S
+-- >>> let stream = S.repeatM (Control.Concurrent.threadDelay 100_000 >> pure "hello")
+-- >>> S.toList_ (timeoutStream 550_000 stream)
+-- ["hello","hello","hello","hello","hello"]
+timeoutStream
+  :: Word64
+  -- ^ Timeout in microseconds
+  -> S.Stream (S.Of a) IO r
+  -- ^ Original stream
+  -> S.Stream (S.Of a) IO (Maybe r)
+  -- ^ Time-limited stream. Returns a 'Just' if no elements were removed, otherwise 'Nothing'.
+timeoutStream timeoutMicros stream = do
+  startTimeNanos <- lift GHC.Clock.getMonotonicTimeNSec
+  let endTimeNanos = startTimeNanos + (fromIntegral timeoutMicros * 1000)
+  go endTimeNanos stream
+  where
+    go endTimeNanos s = do
+      currentTimeNanos <- lift GHC.Clock.getMonotonicTimeNSec
+      let timeLeftMicros = fromIntegral $ (endTimeNanos - currentTimeNanos) `div` 1000
+      if timeLeftMicros <= 0
+        then pure Nothing
+        else lift (System.Timeout.timeout timeLeftMicros $ S.inspect s) >>= \case
+          Nothing -> -- timed out
+            pure Nothing
+          Just eRes -> -- did not time out
+            case eRes of
+              Left r -> -- reached end of the stream
+                pure (Just r)
+              Right (a S.:> s') -> -- the stream yielded an element within the time limit
+                S.yield a >> go endTimeNanos s'
