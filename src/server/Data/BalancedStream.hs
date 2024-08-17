@@ -149,7 +149,7 @@ yieldBalancedM a1 a2 bs =
 -- >>> import Data.Functor.Identity
 -- >>> import Streaming.Prelude
 -- >>> let yieldSum = Streaming.Prelude.yield . Prelude.sum
--- >>> runIdentity $ toList_ $ runIdentity $ appendStreamAccum yieldSum $ S.each [1, 2, 3, 4]
+-- >>> toList_ $ appendStreamAccum yieldSum $ S.each [1, 2, 3, 4]
 -- [1,2,3,4,10]
 appendStreamAccum
   :: Monad m
@@ -158,25 +158,25 @@ appendStreamAccum
   --   Argument: all streamed items in the original stream (in reverse order).
   -> S.Stream (S.Of a) m r
   -- ^ Original stream
-  -> m (S.Stream (S.Of a) m r')
+  -> S.Stream (S.Of a) m r'
   -- ^ Original stream with the result of the @mkStream@ function appended to it.
-appendStreamAccum mkStream s =
-  S.map fst . go [] <$> S.inspect s
+appendStreamAccum mkStream stream =
+  S.map fst $ go [] stream
   where
-    go accum = \case
-      Left _ -> S.map (,accum) $ mkStream accum
-      Right (a S.:> fStream) -> do
-        let accum' = a : accum
-        S.yield (a, accum')
-        eitherStream <- lift $ S.inspect fStream
-        go accum' eitherStream
+    go accum s =
+      lift (S.inspect s) >>= \case
+        Left _ -> S.map (,accum) $ mkStream accum
+        Right (a S.:> s') -> do
+          let accum' = a : accum
+          S.yield (a, accum')
+          go accum' s'
 
 -- | Make a stream return all previously streamed elements
 returnStreamAccum
   :: Monad m
   => S.Stream (S.Of a) m r
   -- ^ Original stream
-  -> m (S.Stream (S.Of a) m [a])
+  -> S.Stream (S.Of a) m [a]
   -- ^ Original stream with a return value of all previously streamed elements
 returnStreamAccum = appendStreamAccum pure
 

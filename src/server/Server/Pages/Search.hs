@@ -87,8 +87,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
     (internalError . mkMissingVertexError (src, dst))
     pure
     eQueryResultStream
-  queryResultStreamWithAccum <- liftIO $ Data.BalancedStream.returnStreamAccum
-    (S.take maxCount queryResultStream)
+  let queryResultStreamWithAccum =
+        Data.BalancedStream.returnStreamAccum (S.take maxCount queryResultStream)
   let queryResultPaths = S.map fst $
         FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
   let resultsTable :: HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
