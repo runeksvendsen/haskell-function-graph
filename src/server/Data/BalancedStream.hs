@@ -32,6 +32,7 @@ import qualified Streaming as S
 import qualified GHC.Clock
 import qualified System.Timeout
 import Data.Word (Word64)
+import Data.Int (Int64)
 
 -- | A stream where an item streamed earlier in the stream
 --   must be terminated by an item streamed later in the stream.
@@ -188,9 +189,13 @@ returnStreamAccum = appendStreamAccum pure
 --
 -- >>> :set -XNumericUnderscores
 -- >>> import qualified Streaming.Prelude as S
--- >>> let stream = S.repeatM (Control.Concurrent.threadDelay 100_000 >> pure "hello")
--- >>> S.toList_ (timeoutStream 550_000 stream)
--- ["hello","hello","hello","hello","hello"]
+-- >>> let stream = S.yield "hello" >> S.repeatM (Control.Concurrent.threadDelay 10_000 >> pure "hello")
+-- >>> S.toList_ (timeoutStream 105_000 stream)
+-- >>> S.toList_ (timeoutStream 25_000 stream)
+-- >>> S.toList_ (timeoutStream 1 stream)
+-- ["hello","hello","hello","hello","hello","hello","hello","hello","hello","hello"]
+-- ["hello","hello","hello"]
+-- []
 timeoutStream
   :: Word64
   -- ^ Timeout in microseconds
@@ -199,12 +204,14 @@ timeoutStream
   -> S.Stream (S.Of a) IO (Maybe r)
   -- ^ Time-limited stream. Returns a 'Just' if no elements were removed, otherwise 'Nothing'.
 timeoutStream timeoutMicros stream = do
-  startTimeNanos <- lift GHC.Clock.getMonotonicTimeNSec
-  let endTimeNanos = startTimeNanos + (fromIntegral timeoutMicros * 1000)
+  startTimeNanos <- fromIntegral <$> lift GHC.Clock.getMonotonicTimeNSec
+  let endTimeNanos :: Int64
+      endTimeNanos = startTimeNanos + (fromIntegral timeoutMicros * 1000)
   go endTimeNanos stream
   where
     go endTimeNanos s = do
-      currentTimeNanos <- lift GHC.Clock.getMonotonicTimeNSec
+      currentTimeNanos <- fromIntegral <$> lift GHC.Clock.getMonotonicTimeNSec
+      -- NOTE: Int64 is used instead of Word64 to avoid the below subtraction causing overflow
       let timeLeftMicros = fromIntegral $ (endTimeNanos - currentTimeNanos) `div` 1000
       if timeLeftMicros <= 0
         then pure Nothing
