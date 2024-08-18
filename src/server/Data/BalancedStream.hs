@@ -190,10 +190,10 @@ returnStreamAccum = appendStreamAccum pure
 -- >>> :set -XNumericUnderscores
 -- >>> import qualified Streaming.Prelude as S
 -- >>> let stream = S.yield "hello" >> S.repeatM (Control.Concurrent.threadDelay 10_000 >> pure "hello")
--- >>> S.toList_ (timeoutStream 105_000 stream)
+-- >>> S.toList_ (timeoutStream 55_000 stream)
 -- >>> S.toList_ (timeoutStream 25_000 stream)
 -- >>> S.toList_ (timeoutStream 1 stream)
--- ["hello","hello","hello","hello","hello","hello","hello","hello","hello","hello"]
+-- ["hello","hello","hello","hello","hello","hello"]
 -- ["hello","hello","hello"]
 -- []
 timeoutStream
