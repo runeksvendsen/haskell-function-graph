@@ -31,8 +31,6 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Streaming as S
 import qualified GHC.Clock
 import qualified System.Timeout
-import Data.Word (Word64)
-import Data.Int (Int64)
 
 -- | A stream where an item streamed earlier in the stream
 --   must be terminated by an item streamed later in the stream.
@@ -189,15 +187,19 @@ returnStreamAccum = appendStreamAccum pure
 --
 -- >>> :set -XNumericUnderscores
 -- >>> import qualified Streaming.Prelude as S
--- >>> let stream = S.yield "hello" >> S.repeatM (Control.Concurrent.threadDelay 10_000 >> pure "hello")
+-- >>> let stream = S.take 10 $ S.iterateM (\count -> Control.Concurrent.threadDelay 10_000 >> pure (count+1)) (pure 1)
 -- >>> S.toList_ (timeoutStream 55_000 stream)
 -- >>> S.toList_ (timeoutStream 25_000 stream)
 -- >>> S.toList_ (timeoutStream 1 stream)
--- ["hello","hello","hello","hello","hello","hello"]
--- ["hello","hello","hello"]
+-- >>> S.toList_ (timeoutStream minBound stream)
+-- >>> S.toList_ (timeoutStream maxBound stream)
+-- [1,2,3,4,5,6]
+-- [1,2,3]
 -- []
+-- []
+-- [1,2,3,4,5,6,7,8,9,10]
 timeoutStream
-  :: Word64
+  :: Int
   -- ^ Timeout in microseconds
   -> S.Stream (S.Of a) IO r
   -- ^ Original stream
@@ -205,17 +207,20 @@ timeoutStream
   -- ^ Time-limited stream. Returns a 'Just' if no elements were removed, otherwise 'Nothing'.
 timeoutStream timeoutMicros stream = do
   startTimeNanos <- fromIntegral <$> lift GHC.Clock.getMonotonicTimeNSec
-  let endTimeNanos :: Int64
+  -- NOTE: Integer is used to avoid having to think about under/overflow
+  let endTimeNanos :: Integer
       endTimeNanos = startTimeNanos + (fromIntegral timeoutMicros * 1000)
   go endTimeNanos stream
   where
+    go :: Integer
+       -> S.Stream (S.Of a) IO r
+       -> S.Stream (S.Of a) IO (Maybe r)
     go endTimeNanos s = do
       currentTimeNanos <- fromIntegral <$> lift GHC.Clock.getMonotonicTimeNSec
-      -- NOTE: Int64 is used instead of Word64 to avoid the below subtraction causing overflow
-      let timeLeftMicros = fromIntegral $ (endTimeNanos - currentTimeNanos) `div` 1000
+      let timeLeftMicros = (endTimeNanos - currentTimeNanos) `div` 1000
       if timeLeftMicros <= 0
         then pure Nothing
-        else lift (System.Timeout.timeout timeLeftMicros $ S.inspect s) >>= \case
+        else lift (System.Timeout.timeout (fromIntegral timeLeftMicros) $ S.inspect s) >>= \case
           Nothing -> -- timed out
             pure Nothing
           Just eRes -> -- did not time out
