@@ -20,6 +20,7 @@ library
                       FunGraph.Examples
                       FunGraph.Test
                       FunGraph.Util
+                      Streaming.Prelude.Extras
     build-depends:    base
                     , hashable
                     , bellman-ford
