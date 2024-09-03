@@ -65,13 +65,13 @@ jobs:
         run: nix-shell --run "cabal build bench:benchmark-lib"
 
       - name: Run benchmark-lib
-        run: nix-shell --run "cabal build bench:benchmark-lib"
+        run: nix-shell --run "cabal run bench:benchmark-lib"
 
       - name: Build benchmark-web
         run: nix-shell --run "cabal build bench:benchmark-web"
 
       - name: Run benchmark-web
-        run: nix-shell --run "cabal build bench:benchmark-web"
+        run: nix-shell --run "cabal run bench:benchmark-web"
 
       - name: Build 'function-graph' executable
         run: nix-shell --run "cabal build exe:function-graph"
