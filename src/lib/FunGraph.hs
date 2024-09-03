@@ -60,6 +60,7 @@ import qualified Data.Time
 import qualified Streaming as S
 import qualified Control.Monad.ST as ST
 import qualified Streaming.Prelude as S
+import qualified Streaming.Prelude.Extras
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -163,14 +164,8 @@ queryTreeTimeoutIO
         IO
         ()
       )
-queryTreeTimeoutIO g timeout maxCount =
-  fmap (S.mapMaybe f) .
-    queryTreeTimeoutIO' g Dijkstra.runDijkstra timeout maxCount
-  where
-    f = \case
-      Dijkstra.TimeBoundedResult_Result a -> Just a
-      Dijkstra.TimeBoundedResult_Done -> Nothing
-      Dijkstra.TimeBoundedResult_TimedOut -> Nothing
+queryTreeTimeoutIO g =
+  queryTreeTimeoutIO' g Dijkstra.runDijkstra
 
 queryTreeTimeoutIOTrace
   :: ( v ~ FullyQualifiedType
@@ -181,15 +176,7 @@ queryTreeTimeoutIOTrace
   -> Int
   -> (v, v)
   -> ExceptT (GraphActionError v) IO
-      (S.Stream
-        (S.Of
-          (Dijkstra.TimeBoundedResult
-              ([meta], Double)
-          )
-        )
-        IO
-        ()
-      )
+      (S.Stream (S.Of ([meta], Double)) IO () )
 queryTreeTimeoutIOTrace g =
   queryTreeTimeoutIO' g $ Dijkstra.runDijkstraTraceGeneric (>>= traceFunDebug)
 
@@ -205,22 +192,22 @@ queryTreeTimeoutIO'
   -> (v, v)
   -> ExceptT (GraphActionError v) IO
       (S.Stream
-        (S.Of
-          (Dijkstra.TimeBoundedResult
-              ([NE.NonEmpty TypedFunction], Double)
-          )
-        )
+        (S.Of ([NE.NonEmpty TypedFunction], Double))
         IO
         ()
       )
 queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
   srcVid <- lookupVertex src
   dstVid <- lookupVertex dst
-  let stream = Dijkstra.dijkstraShortestPathsLevelsTimeout runner' maxCount 1000 (srcVid, dstVid) timeout -- TODO: factor out "level" arg
+  let timeoutMicros = ceiling $ Data.Time.nominalDiffTimeToSeconds timeout * 1e6
+      stream = void $
+        Streaming.Prelude.Extras.timeoutStream timeoutMicros $
+          S.hoist runner' $
+            Dijkstra.dijkstraShortestPathsLevelsStream maxCount 1000 (srcVid, dstVid) -- TODO: factor out "level" arg
       mapStream
-        :: S.Of (Dijkstra.TimeBoundedResult ([DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)], Double)) a
-        -> S.Of (Dijkstra.TimeBoundedResult ([NE.NonEmpty TypedFunction], Double)) a
-      mapStream = first $ fmap (first (map (removeNonMin . DG.eMeta)))
+        :: S.Of ([DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)], Double) a
+        -> S.Of ([NE.NonEmpty TypedFunction], Double) a
+      mapStream = first $ first (map (removeNonMin . DG.eMeta))
   pure $ S.maps mapStream stream
   where
     lookupVertex :: v -> ExceptT (GraphActionError v) IO DG.VertexId
@@ -231,8 +218,8 @@ queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
         pure
         mVid
 
-    runner' :: forall a. Dijkstra.Dijkstra RealWorld v meta a -> ST RealWorld a
-    runner' = runner graph weightCombine initialWeight
+    runner' :: forall a. Dijkstra.Dijkstra RealWorld v meta a -> IO a
+    runner' = ST.stToIO . runner graph weightCombine initialWeight
 
     -- | Remove all edges whose 'functionWeight' is greater than the minimum 'functionWeight'
     removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction

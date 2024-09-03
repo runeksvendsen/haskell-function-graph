@@ -14,7 +14,7 @@ source-repository-package
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/bellman-ford.git
-    tag: 8896ea261c29af4b69b6b8b007873c59c886618c
+    tag: ef7c86f36b13d109f58b70946e023fa83502dec8
 
 source-repository-package
     type: git
