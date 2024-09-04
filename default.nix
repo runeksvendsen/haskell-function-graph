@@ -5,7 +5,7 @@ let
   bellman-ford =
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/bellman-ford.git";
-      rev = "8896ea261c29af4b69b6b8b007873c59c886618c";
+      rev = "ef7c86f36b13d109f58b70946e023fa83502dec8";
     };
     in import src { inherit nixpkgs compiler; };
 
