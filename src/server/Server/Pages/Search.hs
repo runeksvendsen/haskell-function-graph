@@ -90,7 +90,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
     pure
     eQueryResultStream
   let queryResultStreamWithAccum =
-        Data.BalancedStream.returnStreamAccum (S.take maxCount queryResultStream)
+        Data.BalancedStream.returnStreamAccum queryResultStream
   let queryResultPaths = S.map fst $
         FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
   let resultsTable :: HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
