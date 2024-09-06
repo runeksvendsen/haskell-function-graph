@@ -162,7 +162,7 @@ queryTreeTimeoutIO
       (S.Stream
         (S.Of ([NE.NonEmpty TypedFunction], Double))
         IO
-        ()
+        (Maybe ())
       )
 queryTreeTimeoutIO g =
   queryTreeTimeoutIO' g Dijkstra.runDijkstra
@@ -176,7 +176,7 @@ queryTreeTimeoutIOTrace
   -> Int
   -> (v, v)
   -> ExceptT (GraphActionError v) IO
-      (S.Stream (S.Of ([meta], Double)) IO () )
+      (S.Stream (S.Of ([meta], Double)) IO (Maybe ()) )
 queryTreeTimeoutIOTrace g =
   queryTreeTimeoutIO' g $ Dijkstra.runDijkstraTraceGeneric (>>= traceFunDebug)
 
@@ -194,13 +194,13 @@ queryTreeTimeoutIO'
       (S.Stream
         (S.Of ([NE.NonEmpty TypedFunction], Double))
         IO
-        ()
+        (Maybe ()) -- 'Nothing' means "timeout", 'Just' means "no timeout"
       )
 queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
   srcVid <- lookupVertex src
   dstVid <- lookupVertex dst
   let timeoutMicros = ceiling $ Data.Time.nominalDiffTimeToSeconds timeout * 1e6
-      stream = void $
+      stream =
         Streaming.Prelude.Extras.timeoutStream timeoutMicros $
           S.hoistUnexposed runner' $ -- NOTE: Using 'S.hoist' doesn't work, but this does. I don't know why.
             Dijkstra.dijkstraShortestPathsLevelsStream maxCount 1000 (srcVid, dstVid) -- TODO: factor out "level" arg

@@ -144,14 +144,16 @@ yieldBalancedM a1 a2 bs =
 --
 -- >>> import Data.Functor.Identity
 -- >>> import Streaming.Prelude
--- >>> let yieldSum = Streaming.Prelude.yield . Prelude.sum
+-- >>> let yieldSum = const $ Streaming.Prelude.yield . Prelude.sum
 -- >>> toList_ $ appendStreamAccum yieldSum $ S.each [1, 2, 3, 4]
 -- [1,2,3,4,10]
 appendStreamAccum
   :: Monad m
-  => ([a] -> S.Stream (S.Of a) m r')
+  => (r -> [a] -> S.Stream (S.Of a) m r')
   -- ^ @mkStream@ function. Append an element to the end of the original stream.
-  --   Argument: all streamed items in the original stream (in reverse order).
+  --   Arguments:
+  --      2. Return value of original stream
+  --      1. All streamed items in the original stream (in reverse order)
   -> S.Stream (S.Of a) m r
   -- ^ Original stream
   -> S.Stream (S.Of a) m r'
@@ -161,7 +163,7 @@ appendStreamAccum mkStream stream =
   where
     go accum s =
       lift (S.inspect s) >>= \case
-        Left _ -> S.map (,accum) $ mkStream accum
+        Left r -> S.map (,accum) $ mkStream r accum
         Right (a S.:> s') -> do
           let accum' = a : accum
           S.yield (a, accum')
@@ -174,4 +176,4 @@ returnStreamAccum
   -- ^ Original stream
   -> S.Stream (S.Of a) m [a]
   -- ^ Original stream with a return value of all previously streamed elements
-returnStreamAccum = appendStreamAccum pure
+returnStreamAccum = appendStreamAccum (const pure)

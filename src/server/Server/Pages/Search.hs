@@ -2,6 +2,7 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Server.Pages.Search
 ( page
@@ -23,7 +24,7 @@ import qualified Server.GraphViz
 import qualified Control.Monad.ST as ST
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Except (throwError)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Text.Lazy as LT
@@ -74,6 +75,8 @@ handler searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
 handler _ _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
+type StreamElem = ([FunGraph.NonEmpty FunGraph.TypedFunction], Double)
+
 page
   :: SearchEnv
   -> T.Text
@@ -89,11 +92,15 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
     (internalError . mkMissingVertexError (src, dst))
     pure
     eQueryResultStream
-  let queryResultStreamWithAccum =
-        Data.BalancedStream.returnStreamAccum queryResultStream
+  let queryResultStreamWithAccum
+        :: S.Stream (S.Of StreamElem) IO (Bool, [StreamElem]) -- Return value: (timedOut, streamed elements)
+      queryResultStreamWithAccum =
+        Data.BalancedStream.appendStreamAccum
+          (\mTimeout accum -> pure (Data.Maybe.isNothing mTimeout, accum))
+          queryResultStream
   let queryResultPaths = S.map fst $
         FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
-  let resultsTable :: HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+  let resultsTable :: HtmlStream IO (Bool, [StreamElem])
       resultsTable = do
         let mkTable
               :: Monad m
@@ -119,22 +126,24 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
               S.zip queryResultPaths (S.enumFrom 1)
             renderTableWithRows
               :: Bool -- is this the first result?
-              -> S.Stream (S.Of ([FunGraph.TypedFunction], Word)) IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
-              -> HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+              -> S.Stream (S.Of ([FunGraph.TypedFunction], Word)) IO a
+              -> HtmlStream IO a
             renderTableWithRows isFirstResult s = do
               ET.lift (S.next s) >>= \case
                 Left r -> return r
                 Right (result, s') -> do
                   let tableRow = streamHtml (mkTableRow result) >> renderTableWithRows False s'
                   if isFirstResult then mkTable tableRow else tableRow
-        accum <- renderTableWithRows True queryResultPathsWithResultNumber
-        when (null accum) $
-          streamHtml $ noResultsText (src, dst)
-        pure accum
+        renderTableWithRows True queryResultPathsWithResultNumber
       resultGraph accum =
         if null accum then mempty else ET.lift (mkGraph accum) >>= streamHtml
-  -- WIP: show a message if the stream timed out
-  pure (resultsTable >>= resultGraph, (src, dst))
+  pure $ (, (src, dst)) $ do
+    (timedOut, accum) <- resultsTable
+    when timedOut $
+      streamHtml timedOutText
+    when (null accum) $
+      streamHtml $ noResultsText (src, dst)
+    resultGraph accum
   where
     maxCount = fromIntegral maxCount'
 
@@ -152,7 +161,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
 
     mkGraph
       :: ET.MonadIO m
-      => [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+      => [StreamElem]
       -> m (Html ())
     mkGraph queryResult = case mNoGraph of
       Just NoGraph -> pure mempty
@@ -181,6 +190,13 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         , "."
         ]
 
+    timedOutText :: Html ()
+    timedOutText =
+      mkErrorText $ mconcat
+        [ "Query timed out! Query did not terminate within the time limit of "
+        , toHtml $ show timeout
+        ]
+
     mkPackageLink fnPkg =
       a_
         [ href_ $ "https://hackage.haskell.org/package/" <> FunGraph.renderFgPackage fnPkg
@@ -198,9 +214,11 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
       ET.runExceptT $
           FunGraph.queryTreeTimeoutIO
             graph
-            0.1 -- WIP: don't hardcode
+            timeout
             maxCount
             srcDst
+
+    timeout = 0.1 -- WIP: don't hardcode
 
     renderResultGraphIO queryResult =
       let
