@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Server.Pages.Search
 ( page
@@ -35,6 +36,7 @@ import qualified Control.Monad.Except as ET
 import Server.HtmlStream
 import qualified Streaming.Prelude as S
 import qualified Data.BalancedStream
+import Control.Monad (when)
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -93,27 +95,45 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
   let resultsTable :: HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
       resultsTable = do
-        streamTagBalancedM "table" $ do
-          streamHtml $ thead_ $
-            tr_ $ do
-              td_ "Function composition"
-              td_ "Dependencies"
-          streamTagBalancedM "tbody" $ do
-            let f :: ([FunGraph.TypedFunction], Word) -> Html ()
-                f (result, resultNumber) =
-                    tr_ [mkResultAttribute (T.pack $ show resultNumber)] $ do
-                      td_ $ renderResult result
-                      td_ $
-                        mconcat $
-                          intersperse ", " $
-                            map mkPackageLink (nubOrd $ map FunGraph._function_package result)
-            let queryResultPathsWithResultNumber =
-                  S.zip queryResultPaths (S.enumFrom 1)
-            liftStream $ S.map f queryResultPathsWithResultNumber
+        let mkTable
+              :: Monad m
+              => HtmlStream m a
+              -> HtmlStream m a
+            mkTable rows =
+              streamTagBalancedM "table" $ do
+                streamTagBalancedM "tbody" $ do
+                  streamHtml $ thead_ $
+                    tr_ $ do
+                      td_ "Function composition"
+                      td_ "Dependencies"
+                  rows
+            mkTableRow :: ([FunGraph.TypedFunction], Word) -> Html ()
+            mkTableRow (result, resultNumber) =
+                tr_ [mkResultAttribute (T.pack $ show resultNumber)] $ do
+                  td_ $ renderResult result
+                  td_ $
+                    mconcat $
+                      intersperse ", " $
+                        map mkPackageLink (nubOrd $ map FunGraph._function_package result)
+            queryResultPathsWithResultNumber =
+              S.zip queryResultPaths (S.enumFrom 1)
+            renderTableWithRows
+              :: Bool -- is this the first result?
+              -> S.Stream (S.Of ([FunGraph.TypedFunction], Word)) IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+              -> HtmlStream IO [([FunGraph.NonEmpty FunGraph.TypedFunction], Double)]
+            renderTableWithRows isFirstResult s = do
+              ET.lift (S.next s) >>= \case
+                Left r -> return r
+                Right (result, s') -> do
+                  let tableRow = streamHtml (mkTableRow result) >> renderTableWithRows False s'
+                  if isFirstResult then mkTable tableRow else tableRow
+        accum <- renderTableWithRows True queryResultPathsWithResultNumber
+        when (null accum) $
+          streamHtml $ noResultsText (src, dst)
+        pure accum
       resultGraph accum =
-        ET.lift (mkGraph accum) >>= streamHtml
-  -- WIP: check timeout
-  -- let resultHtml = if S.maps null queryResultPaths then streamHtml $ noResultsText (src, dst) else resultHtml'
+        if null accum then mempty else ET.lift (mkGraph accum) >>= streamHtml
+  -- WIP: show a message if the stream timed out
   pure (resultsTable >>= resultGraph, (src, dst))
   where
     maxCount = fromIntegral maxCount'
