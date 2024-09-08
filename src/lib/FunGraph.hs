@@ -202,6 +202,7 @@ queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
   let timeoutMicros = ceiling $ Data.Time.nominalDiffTimeToSeconds timeout * 1e6
       stream =
         Streaming.Prelude.Extras.timeoutStream timeoutMicros $
+          S.take maxCount $
           S.hoistUnexposed runner' $ -- NOTE: Using 'S.hoist' doesn't work, but this does. I don't know why.
             Dijkstra.dijkstraShortestPathsLevelsStream maxCount 1000 (srcVid, dstVid) -- TODO: factor out "level" arg
       mapStream
