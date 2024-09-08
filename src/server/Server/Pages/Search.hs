@@ -69,7 +69,7 @@ handler
   :: SearchEnv
   -> HandlerType (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
 handler searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
-  let defaultLimit = 100000 -- TODO: add as HTML input field
+  let defaultLimit = 100 -- TODO: add as HTML input field
   in do
     page searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
 handler _ _ _ _ _ _ =
@@ -173,10 +173,9 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
           resultGraphE
         pure $ do
           h3_ "Result graph"
-          let addSvgElemId = T.replace "<svg " "<svg id=\"graph\" " -- hacky way to add an "id" attribute to raw HTML
           either
             (const $ mkErrorText "Failed to render result graph")
-            (toHtmlRaw . addSvgElemId) -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+            toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
             resultGraphE
           openSvgInNewWindowBtn
 
@@ -273,7 +272,7 @@ openSvgInNewWindowBtn = do
     , " btnElem.style.visibility = \"visible\";"
     , " // open SVG in new window on click"
     , " btnElem.onclick = (evt) => {"
-    , "  const svg = document.getElementById(\"graph\");"
+    , "  const svg = document.querySelector(\"svg\");"
     , "  const as_text = new XMLSerializer().serializeToString(svg);"
     , "  const blob = new Blob([as_text], { type: \"image/svg+xml\" });"
     , "  const url = URL.createObjectURL(blob);"
