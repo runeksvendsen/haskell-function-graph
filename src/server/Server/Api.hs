@@ -22,7 +22,7 @@ import qualified Streaming.Prelude as S
 import Servant.HTML.Lucid (HTML)
 import Lucid (Html)
 import qualified Data.Text as T
-import Server.HtmlStream (HtmlStream, toStream, liftStream)
+import Server.HtmlStream (HtmlStream)
 
 type Api = Root :<|> Search :<|> Typeahead
 
@@ -87,9 +87,3 @@ instance Servant.API.Stream.FromSourceIO a (StreamIO a) where
               Yield x s -> S.yield x >> go s
               Effect ms -> S.lift ms >>= go
         in go
-
-instance Servant.API.Stream.ToSourceIO (Html ()) (HtmlStream IO ()) where
-  toSourceIO = toSourceIO . Server.HtmlStream.toStream
-
-instance Servant.API.Stream.FromSourceIO (Html ()) (HtmlStream IO ()) where
-  fromSourceIO = Server.HtmlStream.liftStream . fromSourceIO

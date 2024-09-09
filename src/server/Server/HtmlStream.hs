@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Server.HtmlStream
 ( HtmlStream
 , Server.HtmlStream.toStream
@@ -16,6 +19,7 @@ import qualified Lucid.Base as Lucid
 import qualified Data.Text as T
 import Control.Monad.Trans.Class (MonadTrans)
 import qualified Streaming.Prelude as S
+import qualified Servant.API.Stream
 
 -- | Example:
 --
@@ -94,3 +98,11 @@ streamTagBalancedAttrM tag attrs s = HtmlStream $
   yieldBalancedM (start `Lucid.with` attrs) end (unHtmlStream s)
   where
     (start, end) = mkStartEndElem tag
+
+instance (Servant.API.Stream.ToSourceIO (Html ()) (Stream (Of (Html ())) IO ()))
+  => Servant.API.Stream.ToSourceIO (Html ()) (HtmlStream IO ()) where
+  toSourceIO = Servant.API.Stream.toSourceIO . Server.HtmlStream.toStream
+
+instance (Servant.API.Stream.FromSourceIO (Html ()) (Stream (Of (Html ())) IO ()))
+  => Servant.API.Stream.FromSourceIO (Html ()) (HtmlStream IO ()) where
+  fromSourceIO = Server.HtmlStream.liftStream . Servant.API.Stream.fromSourceIO
