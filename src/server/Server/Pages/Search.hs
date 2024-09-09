@@ -125,7 +125,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
             queryResultPathsWithResultNumber =
               S.zip queryResultPaths (S.enumFrom 1)
             renderTableWithRows
-              :: Bool -- is this the first result?
+              :: Bool -- Denotes whether this the first result
               -> S.Stream (S.Of ([FunGraph.TypedFunction], Word)) IO a
               -> HtmlStream IO a
             renderTableWithRows isFirstResult s = do

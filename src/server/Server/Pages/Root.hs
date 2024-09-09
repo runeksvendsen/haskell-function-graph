@@ -37,7 +37,7 @@ page appendToHead initialSuggestions (searchResult, mSrcDst) = do
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do
+  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
     let targetId = "search_result"
     streamHtml $ do
       h1_ "Search for compositions of functions"
@@ -67,7 +67,7 @@ form targetId initialSuggestions mSrcDst = do
       srcInput
       label_ [for_ "dst"] "TO type: "
       dstInput
-      button_ [] $ "Search" <> spinnerSvg
+      button_ [] $ "Search" <> spinnerSvg -- TODO: Display spinner on the same line as "Search" text
   where
     -- Source: https://github.com/n3r4zzurr0/svg-spinners/blob/abfa05c49acf005b8b1e0ef8eb25a67a7057eb20/svg-smil/180-ring.svg
     spinnerSvg = toHtmlRaw @T.Text
