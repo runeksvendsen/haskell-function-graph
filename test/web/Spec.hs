@@ -74,7 +74,7 @@ main' runQuery = do
             Set.fromList (map IgnorePackage result)
               `isSupersetOf`
                 Set.map IgnorePackage (FunGraph.Test.queryTest_expectedResult test)
-  pure $ HSpec.describe "Unit tests" $ do
+  pure $ HSpec.describe "Integration tests" $ do
     HSpec.describe "Expected result" $
       forM_ FunGraph.Test.allTestCases testCase
 
