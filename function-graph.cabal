@@ -9,6 +9,7 @@ build-type:      Simple
 extra-doc-files: CHANGELOG.md
 tested-with:     GHC == 8.10.7, GHC == 9.0.2
 
+-- TODO: add -Wunused-packages
 common warnings
     ghc-options: -Wall
 
@@ -137,7 +138,6 @@ benchmark benchmark-web
   ghc-options: -threaded
                -O2
 
--- TODO: Add integration test that runs a server like `benchmark-web`
 test-suite function-graph-test
   import: warnings
   type: exitcode-stdio-1.0
@@ -154,4 +154,35 @@ test-suite function-graph-test
     , hspec
     , hspec-expectations
     , hspec-expectations-pretty-diff
+  default-language: Haskell2010
+
+test-suite test-web
+  import: warnings
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs: test/web
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -fno-ignore-asserts
+  build-depends:
+      base
+    , function-graph
+    , dump-decls-lib
+    , bytestring
+    , text
+    , containers
+    , hspec
+    , hspec-expectations-pretty-diff
+    , function-graph-server
+    , servant
+    , servant-client
+    , servant-lucid
+    , text
+    , bytestring
+    , lucid
+    , warp
+    , http-client
+    , streaming-commons
+    , wai
+    , async
+    , streaming
+    , html-parse
   default-language: Haskell2010

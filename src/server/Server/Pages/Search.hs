@@ -116,8 +116,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
                   rows
             mkTableRow :: ([FunGraph.TypedFunction], Word) -> Html ()
             mkTableRow (result, resultNumber) =
-                tr_ [mkResultAttribute (T.pack $ show resultNumber)] $ do
-                  td_ $ renderResult result
+                tr_ $ do
+                  td_ $ renderResult (result, resultNumber)
                   td_ $
                     mconcat $
                       intersperse ", " $
@@ -227,8 +227,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
       in ST.stToIO resultDotGraph
         >>= Server.GraphViz.renderDotGraph
 
-    renderResult :: [FunGraph.TypedFunction] -> Html ()
-    renderResult fns =
+    renderResult :: ([FunGraph.TypedFunction], Word) -> Html ()
+    renderResult (fns, resultNumber) =
       let renderSingleFn fn =
             let (fromTy, toTy) = FunGraph.typedFunctionFromToTypes fn
                 typeSig = T.unwords
@@ -243,7 +243,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
                   [href_ $ FunGraph.functionToHackageDocsUrl fn, target_ "_blank"]
                   (mono $ toHtml $ FunGraph.renderFunctionNoPackage fn)
             in functionNameWithLink `with` [title_ typeSig]
-      in mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
+      in div_ [mkResultAttribute (T.pack $ show resultNumber)] $
+          mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
 
     mono =
       let style = style_ $ T.intercalate "; " $
