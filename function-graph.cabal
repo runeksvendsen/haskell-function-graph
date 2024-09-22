@@ -19,7 +19,6 @@ library
                       FunGraph.Types
                       FunGraph.Build
                       FunGraph.Examples
-                      FunGraph.Test
                       FunGraph.Util
                       Streaming.Prelude.Extras
     build-depends:    base
@@ -31,8 +30,6 @@ library
                     , text
                     , containers
                     , utf8-string
-                    , pretty-show
-                    , stringsearch
                     , deepseq
                     , mtl
                     , time
@@ -65,7 +62,6 @@ library function-graph-server
                     , servant-lucid
                     , servant
                     , servant-server
-                    , wai
                     , warp
                     , mtl
                     , transformers
@@ -78,8 +74,38 @@ library function-graph-server
                     , wai-extra
                     , deepseq
                     , streaming
-                    , time
     hs-source-dirs:   src/server
+    default-language: Haskell2010
+
+library test
+    import:           warnings
+    exposed-modules:  FunGraph.Test
+                      FunGraph.Test.Util
+                      FunGraph.Test.ExtraArgs
+    build-depends:    base
+                    , function-graph
+                    , bytestring
+                    , text
+                    , containers
+                    , deepseq
+                    , streaming
+                    -- FunGraph.Util
+                    , lucid
+                    , hspec-expectations-pretty-diff
+                    , function-graph-server
+                    , servant
+                    , servant-client
+                    , servant-lucid
+                    , text
+                    , bytestring
+                    , lucid
+                    , warp
+                    , http-client
+                    , streaming-commons
+                    , wai
+                    , async
+                    , streaming
+    hs-source-dirs:   src/test
     default-language: Haskell2010
 
 executable server
@@ -102,11 +128,12 @@ executable function-graph
 benchmark benchmark-lib
   import: warnings
   type: exitcode-stdio-1.0
-  main-is: Benchmarks.hs
-  hs-source-dirs: benchmark
+  main-is: BenchmarkLib.hs
+  hs-source-dirs: benchmark/lib
   build-depends:
       base
     , function-graph
+    , function-graph:test
     , criterion
   default-language: Haskell2010
   ghc-options: -threaded
@@ -116,23 +143,15 @@ benchmark benchmark-web
   import: warnings
   type: exitcode-stdio-1.0
   main-is: BenchmarkWeb.hs
-  hs-source-dirs: benchmark
+  hs-source-dirs: benchmark/web
   build-depends:
       base
-    , function-graph
+    , function-graph:test
     , function-graph-server
-    , servant
-    , servant-client
-    , servant-lucid
     , criterion
     , text
     , bytestring
     , lucid
-    , warp
-    , http-client
-    , streaming-commons
-    , wai
-    , async
     , streaming
   default-language: Haskell2010
   ghc-options: -threaded
@@ -147,6 +166,7 @@ test-suite test-unit
   build-depends:
       base
     , function-graph
+    , function-graph:test
     , bellman-ford
     , bytestring
     , text
@@ -165,6 +185,7 @@ test-suite test-web
   build-depends:
       base
     , function-graph
+    , function-graph:test
     , dump-decls-lib
     , bytestring
     , text
