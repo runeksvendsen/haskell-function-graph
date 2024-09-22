@@ -40,6 +40,7 @@ import Servant.HTML.Lucid (HTML)
 import Server.HtmlStream (HtmlStream, toStream)
 import Test.Hspec.Expectations.Pretty (shouldBe)
 import Lucid.Base (Html)
+import qualified Control.Exception
 
 isSupersetOf :: (Show a, Ord a) => Set.Set a -> Set.Set a -> IO ()
 isSupersetOf actual expected =
@@ -55,7 +56,7 @@ runWarpTestRandomPort app runApp = do
   let warpSettings =
         Network.Wai.Handler.Warp.setPort port $
         Network.Wai.Handler.Warp.setBeforeMainLoop
-          (void $ Conc.forkIO $ runApp port >> Conc.putMVar readyMVar ())
+          (void $ Conc.forkIO $ runApp port `Control.Exception.finally` Conc.putMVar readyMVar ())
           Network.Wai.Handler.Warp.defaultSettings
   eRes <- Async.race
     (Network.Wai.Handler.Warp.runSettingsSocket warpSettings socket app)
