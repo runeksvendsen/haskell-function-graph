@@ -74,6 +74,7 @@ library function-graph-server
                     , wai-extra
                     , deepseq
                     , streaming
+                    , time
     hs-source-dirs:   src/server
     default-language: Haskell2010
 

@@ -25,13 +25,21 @@ import Streaming (lift)
 import Control.Monad (when)
 import Data.Maybe (isJust)
 import qualified Data.ByteString.Lazy as BSL
+import Debug.Trace (trace)
+import qualified Data.Text as T
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
 
+-- NOTE: If a benchmark times out then increase this limit
+searchConfig :: Server.Pages.Search.SearchConfig
+searchConfig = Server.Pages.Search.defaultSearchConfig
+  { Server.Pages.Search.searchConfigTimeout = 10
+  }
+
 main :: IO ()
 main =
-  Server.withHandlers logger mempty testDataFileName $ \handlers ->
+  Server.withHandlers logger searchConfig mempty testDataFileName $ \handlers ->
     runWarpTestRandomPort (Server.app handlers) $ \port ->
       mkQueryFunction port >>= runTests
   where
@@ -48,12 +56,17 @@ runTests runQuery = do
       ] <&> \(postFix, modifyStream) ->
         bgroup ("search " ++ postFix)
           [ bgroup "with graph" $
-              map (benchHttpRequest modifyStream Nothing) FunGraph.Test.allTestCases
+              map (benchHttpRequest modifyStream Nothing) allTestCasesNoTimeout
           , bgroup "without graph" $
-              map (benchHttpRequest modifyStream (Just Server.Api.NoGraph)) FunGraph.Test.allTestCases
+              map (benchHttpRequest modifyStream (Just Server.Api.NoGraph)) allTestCasesNoTimeout
           ]
     ]
   where
+    -- Currently, the test cases with an empty expected result are tests that are expected to time out.
+    -- There's no reason to benchmark this.
+    allTestCasesNoTimeout =
+      filter (\blah -> FunGraph.Test.queryTest_expectedResult blah /= mempty) FunGraph.Test.allTestCases
+
     benchHttpRequest
       :: (StreamIOHtml -> StreamIOHtml)
       -> Maybe Server.Api.NoGraph
@@ -68,12 +81,15 @@ runTests runQuery = do
       :: StreamIOHtml
       -> StreamIOHtml
     untilFirstResult s = do
-      let Lucid.Base.Attribute resultHtmlAttributeText _ = Server.Pages.Search.mkResultAttribute ""
+      let Lucid.Base.Attribute resultHtmlAttributeText _ = Server.Pages.Search.mkResultAttribute "1"
           containsSearchResult :: Lucid.Html () -> Bool
-          containsSearchResult = LT.isInfixOf (LT.fromStrict resultHtmlAttributeText) . Lucid.renderText
+          containsSearchResult html =
+            let htmlText = Lucid.renderText html
+                traceText = T.unpack resultHtmlAttributeText <> " in " <> LT.unpack htmlText
+            in traceText `trace` LT.isInfixOf (LT.fromStrict resultHtmlAttributeText) htmlText
       maybeNotContainsSearchResult <- takeWhileMaybe (not . containsSearchResult) s
       when (isJust maybeNotContainsSearchResult) $
-        fail "Search result not found"
+        fail "Search result not found. Possible fix: increase 'searchConfigTimeout'."
 
     -- Same as 'Streaming.Prelude.takeWhile' except returns 'Nothing' if the predicate returned False at some point
     --  (so that the number of stream elements was reduced).

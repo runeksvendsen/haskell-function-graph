@@ -8,6 +8,7 @@ module Server.Pages.Search
 ( page
 , handler, HandlerType
 , SearchEnv, createSearchEnv
+, SearchConfig(..), defaultSearchConfig
   -- * Testing/benchmarking
 , mkResultAttribute
 )
@@ -38,11 +39,22 @@ import Server.HtmlStream
 import qualified Streaming.Prelude as S
 import qualified Data.BalancedStream
 import Control.Monad (when)
+import qualified Data.Time.Clock
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
   { searchEnvGraph :: !(FunGraph.Graph ST.RealWorld)
   , searchEnvVertexLookup :: T.Text -> Maybe FunGraph.FullyQualifiedType
+  }
+
+-- | TODO
+data SearchConfig = SearchConfig
+  { searchConfigTimeout :: !Data.Time.Clock.NominalDiffTime
+  }
+
+defaultSearchConfig :: SearchConfig
+defaultSearchConfig = SearchConfig
+  { searchConfigTimeout = 0.1
   }
 
 createSearchEnv
@@ -66,25 +78,27 @@ type HandlerType ret
   -> Handler ret
 
 handler
-  :: SearchEnv
+  :: SearchConfig
+  -> SearchEnv
   -> HandlerType (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-handler searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
+handler cfg searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
   let defaultLimit = 100 -- TODO: add as HTML input field
   in do
-    page searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
-handler _ _ _ _ _ _ =
+    page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
+handler _ _ _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
 type StreamElem = ([FunGraph.NonEmpty FunGraph.TypedFunction], Double)
 
 page
-  :: SearchEnv
+  :: SearchConfig
+  -> SearchEnv
   -> T.Text
   -> T.Text
   -> Word
   -> Maybe NoGraph
   -> Handler (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
+page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
   eQueryResultStream <- liftIO $ query' (src, dst)
@@ -217,7 +231,7 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
             maxCount
             srcDst
 
-    timeout = 0.1 -- WIP: don't hardcode
+    timeout = searchConfigTimeout cfg
 
     renderResultGraphIO queryResult =
       let

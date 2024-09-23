@@ -32,7 +32,7 @@ testDataFileName = "data/all3.json"
 
 main :: IO ()
 main =
-  Server.withHandlers logger mempty testDataFileName $ \handlers ->
+  Server.withHandlers logger Server.Pages.Search.defaultSearchConfig mempty testDataFileName $ \handlers ->
     runWarpTestRandomPort (Server.app handlers) $ \port -> do
       queryFun <- mkQueryFunction port
       let runQuery = fmap parsePPFunctions <$> queryFun id (Just Server.Api.NoGraph)
