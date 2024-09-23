@@ -55,11 +55,17 @@ jobs:
       - name: Build 'function-graph-server' library
         run: nix-shell --run "cabal build lib:function-graph-server"
 
-      - name: Build 'function-graph-test' test suite
-        run: nix-shell --run "cabal build test-suite:function-graph-test"
+      - name: Build 'test-unit' test suite
+        run: nix-shell --run "cabal build test-suite:test-unit"
 
-      - name: Run 'function-graph-test' test suite
-        run: nix-shell --run "cabal test test-suite:function-graph-test --test-show-details=direct"
+      - name: Run 'test-unit' test suite
+        run: nix-shell --run "cabal test test-suite:test-unit --test-show-details=direct"
+
+      - name: Build 'test-web' test suite
+        run: nix-shell --run "cabal build test-suite:test-web"
+
+      - name: Run 'test-web' test suite
+        run: nix-shell --run "cabal test test-suite:test-web --test-show-details=direct"
 
       - name: Build benchmark-lib
         run: nix-shell --run "cabal build bench:benchmark-lib"
