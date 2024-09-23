@@ -25,8 +25,6 @@ import Streaming (lift)
 import Control.Monad (when)
 import Data.Maybe (isJust)
 import qualified Data.ByteString.Lazy as BSL
-import Debug.Trace (trace)
-import qualified Data.Text as T
 
 testDataFileName :: FilePath
 testDataFileName = "data/all3.json"
@@ -83,10 +81,7 @@ runTests runQuery = do
     untilFirstResult s = do
       let Lucid.Base.Attribute resultHtmlAttributeText _ = Server.Pages.Search.mkResultAttribute "1"
           containsSearchResult :: Lucid.Html () -> Bool
-          containsSearchResult html =
-            let htmlText = Lucid.renderText html
-                traceText = T.unpack resultHtmlAttributeText <> " in " <> LT.unpack htmlText
-            in traceText `trace` LT.isInfixOf (LT.fromStrict resultHtmlAttributeText) htmlText
+          containsSearchResult = LT.isInfixOf (LT.fromStrict resultHtmlAttributeText) . Lucid.renderText
       maybeNotContainsSearchResult <- takeWhileMaybe (not . containsSearchResult) s
       when (isJust maybeNotContainsSearchResult) $
         fail "Search result not found. Possible fix: increase 'searchConfigTimeout'."
