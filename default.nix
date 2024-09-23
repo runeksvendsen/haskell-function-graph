@@ -1,5 +1,5 @@
 { nixpkgs ? (import ./nix/pkgs.nix).pkgs
-, compiler ? "ghc92"
+, compiler ? "ghc90"
 }:
 let
   bellman-ford =
