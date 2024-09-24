@@ -109,7 +109,9 @@ parsePPFunctions bs = do
     attrName (Text.HTML.Parser.Attr name _) = name
 
 newtype IgnorePackage a = IgnorePackage a
-  deriving (Show)
+
+instance Show (IgnorePackage FunGraph.Test.PPFunctions) where
+  show (IgnorePackage a) = show a
 
 instance Eq (IgnorePackage FunGraph.Test.PPFunctions) where
   IgnorePackage a == IgnorePackage b =
