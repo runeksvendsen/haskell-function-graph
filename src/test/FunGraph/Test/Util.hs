@@ -15,7 +15,6 @@ where
 
 import Control.Monad.IO.Class (liftIO)
 import Data.Data (Proxy(Proxy))
-import Data.Functor (void)
 import qualified Control.Concurrent as Conc
 import qualified Control.Concurrent as MVar
 import qualified Control.Concurrent.Async as Async
@@ -40,28 +39,33 @@ import Servant.HTML.Lucid (HTML)
 import Server.HtmlStream (HtmlStream, toStream)
 import Test.Hspec.Expectations.Pretty (shouldBe)
 import Lucid.Base (Html)
-import qualified Control.Exception
 
 isSupersetOf :: (Show a, Ord a) => Set.Set a -> Set.Set a -> IO ()
 isSupersetOf actual expected =
   actual `shouldBe` Set.union actual expected
 
+-- Run a 'Network.Wai.Application' on a random port and execute an IO action when the listening socket is ready.
 runWarpTestRandomPort
-  :: Network.Wai.Application -- ^ Warp 'Network.Wai.Application'
-  -> (Int -> IO ()) -- ^ Test action to run when the listening socket is ready. Argument: server port number. The server will be shut down when this IO action returns.
-  -> IO ()
-runWarpTestRandomPort app runApp = do
+  :: Network.Wai.Application
+  -- ^ Warp 'Network.Wai.Application'
+  -> (Int -> IO a)
+  -- ^ Test action to run when the listening socket is ready. Argument: server port number.
+  --
+  -- The server will be shut down when this IO action terminates.
+  -- An exception thrown by this IO action will be rethrown by 'runWarpTestRandomPort'
+  -> IO a
+runWarpTestRandomPort app testAction = do
   (port, socket) <- Data.Streaming.Network.bindRandomPortTCP "!4"
-  readyMVar <- MVar.newEmptyMVar
+  asyncMVar <- MVar.newEmptyMVar
   let warpSettings =
         Network.Wai.Handler.Warp.setPort port $
         Network.Wai.Handler.Warp.setBeforeMainLoop
-          (void $ Conc.forkIO $ runApp port `Control.Exception.finally` Conc.putMVar readyMVar ())
+          (Async.async (testAction port) >>= Conc.putMVar asyncMVar)
           Network.Wai.Handler.Warp.defaultSettings
   eRes <- Async.race
     (Network.Wai.Handler.Warp.runSettingsSocket warpSettings socket app)
-    (Conc.takeMVar readyMVar)
-  either (const $ fail "server exited") pure eRes
+    (Conc.takeMVar asyncMVar >>= Async.wait)
+  either (const $ fail "runWarpTestRandomPort: Wai Application exited unexpectedly") pure eRes
 
 type StreamIOHtml = Stream (Of (Html ())) IO ()
 
