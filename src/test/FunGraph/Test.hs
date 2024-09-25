@@ -105,7 +105,7 @@ case3 =
 
 case4 :: QueryTest
 case4 =
-  mkTestCase 45
+  mkTestCase 100
     (strictByteString, lazyText)
     [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
     , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"
