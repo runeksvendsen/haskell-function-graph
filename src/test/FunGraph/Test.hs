@@ -9,6 +9,8 @@ module FunGraph.Test
 ( allTestCases
 , QueryTest(..), queryTest_runQuery
 , PPFunctions(..)
+  -- * TODO
+, queryTreeAndPathsGAStreamTest
 )
 where
 
@@ -22,6 +24,11 @@ import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
 import Data.Bifunctor (first)
 import qualified Data.Text as T
+import qualified Control.Monad.Trans.Except as Except
+import qualified Streaming.Prelude as S
+import qualified Control.Monad.ST as ST
+import qualified Data.Time
+import qualified Streaming as S
 
 data QueryTest = QueryTest
     { queryTest_name :: String
@@ -67,6 +74,37 @@ mkTestCase maxCount (from, to) expectedList =
       (error $ "parseComposedFunctions: bad input: " <> T.unpack bs)
       id
       (FunGraph.parseComposedFunctions bs)
+
+queryTreeAndPathsGAStreamTest
+  :: ( v ~ FunGraph.FullyQualifiedType
+     )
+  => Data.Time.NominalDiffTime -- ^ timeout
+  -> Args
+  -> FunGraph.Digraph ST.RealWorld FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction)
+  -> IO (Either (FunGraph.GraphActionError v) [(PPFunctions, Double)])
+queryTreeAndPathsGAStreamTest timeout (maxCount, srcDst) graph =
+  Except.runExceptT $
+    S.lift . S.toList_ =<< streamExcept
+  where
+    streamExcept =
+      S.concat . S.map toPPFunctions <$>
+        FunGraph.queryTreeAndPathsGAStream graph timeout maxCount srcDst
+
+    toPPFunctions
+      :: (([NE.NonEmpty FunGraph.TypedFunction], Double), [([FunGraph.TypedFunction], Double)])
+      -> [(PPFunctions, Double)]
+    toPPFunctions = map (first $ PPFunctions . map void) . snd
+
+-- IO
+--      (Either
+--         (GraphActionError FullyQualifiedType) [(PPFunctions, Double)])
+
+-- TODO:
+    --   queryTest_runQueryFun
+    --     :: forall s v meta.
+    --        (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
+    --     => Args
+    --     -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
 
 allTestCases :: [QueryTest]
 allTestCases =

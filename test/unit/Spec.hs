@@ -59,14 +59,18 @@ main' shouldTrace graph = do
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
           HSpec.it "contained in top query results" $ do
-            eResult <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
+            let queryTestStream = FunGraph.Test.queryTreeAndPathsGAStreamTest timeout args
+                args = FunGraph.Test.queryTest_args test
+                timeout = 1000
+            eResult <- queryTestStream graph
             result <- either handleError pure eResult
             Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 FunGraph.Test.queryTest_expectedResult test
   pure $ HSpec.describe "Unit tests" $ do
     HSpec.describe "Expected result" $
-      forM_ FunGraph.Test.allTestCases testCase
+      HSpec.describe "Stream" $
+        forM_ FunGraph.Test.allTestCases testCase
   where
     traceFunction = if shouldTrace then traceResults else id
 
