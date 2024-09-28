@@ -13,7 +13,7 @@ import qualified Test.Hspec as HSpec
 import qualified Test.Hspec.Runner as HSpec
 import qualified Data.Set as Set
 import Debug.Trace (trace)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, unless)
 import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified Data.List.NonEmpty as NE
@@ -64,6 +64,20 @@ main' shouldTrace graph = do
                 timeout = 1000
             eResult <- queryTestStream graph
             result <- either handleError pure eResult
+            -- Fail unless we get at least 'maxCount' results.
+            -- If this fails then reduce maxCount to the minimum required to pass.
+            let resultCount = length result
+            unless (resultCount == 0 || maxCount <= resultCount) $
+              fail $ unwords
+                [ "Unnecessarily high maxCount."
+                , "maxCount is"
+                , show maxCount
+                , "but only got"
+                , show resultCount
+                , "results."
+                , "Results:"
+                , show $ map fst result
+                ]
             Set.fromList (map fst $ traceFunction result)
               `isSupersetOf`
                 FunGraph.Test.queryTest_expectedResult test
