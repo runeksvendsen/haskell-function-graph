@@ -7,7 +7,7 @@
 {-# HLINT ignore "Use fmap" #-}
 module FunGraph.Test
 ( allTestCases
-, QueryTest(..), queryTest_runQuery
+, QueryTest(..), queryTest_runQuery, Args
 , PPFunctions(..)
   -- * TODO
 , queryTreeAndPathsGAStreamTest

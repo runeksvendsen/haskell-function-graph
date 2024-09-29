@@ -3,7 +3,9 @@
 {-# HLINT ignore "Use infix" #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Main where
+module Main
+(main)
+where
 
 import FunGraph.Test.Util
 import FunGraph.Test.ExtraArgs
@@ -26,9 +28,22 @@ main :: IO ()
 main =
   withTraceArg $ \shouldTrace ->
     FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
-      spec <- main' shouldTrace graph
+      spec <- main' shouldTrace queryFunctions graph
       runHspecWithTraceTip shouldTrace spec
   where
+    queryFunctions = NE.fromList
+      [("Stream", queryTestStream)]
+      -- TODO: list-based query function
+
+    queryTestStream
+      :: FunGraph.Test.Args
+      -> FunGraph.Graph ST.RealWorld
+      -> IO QueryResults
+    queryTestStream =
+      FunGraph.Test.queryTreeAndPathsGAStreamTest timeout
+      where
+        timeout = 1000
+
     traceCLIArg :: String
     traceCLIArg = "--trace"
 
@@ -42,15 +57,19 @@ main =
         putStrLn $ "\nTest suite had failures. Run again with the " <> traceCLIArg <> " argument to print tracing information."
       HSpec.evaluateSummary summary
 
+type QueryResults =
+  Either (FunGraph.GraphActionError FunGraph.FullyQualifiedType) [(FunGraph.Test.PPFunctions, Double)]
+
 main'
   :: Bool
+  -> NE.NonEmpty (String, FunGraph.Test.Args -> FunGraph.Graph ST.RealWorld -> IO QueryResults)
   -> FunGraph.Graph ST.RealWorld
   -> IO HSpec.Spec
-main' shouldTrace graph = do
+main' shouldTrace queryFunctions graph = do
   graphEdgeSet <- ST.stToIO (DG.toEdges graph)
   let graphEdges = Set.map void $ Set.fromList $ concat $ Set.map (NE.toList . DG.eMeta) graphEdgeSet
   let testCase test =
-        let (maxCount, _) = FunGraph.Test.queryTest_args test
+        let args@(maxCount, _) = FunGraph.Test.queryTest_args test
         in HSpec.describe (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $ do
           HSpec.it "edges are contained in the graph" $ do
             let ppFunctions = Set.fromList $
@@ -58,29 +77,28 @@ main' shouldTrace graph = do
                   Set.toList $
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
-          HSpec.it "contained in top query results" $ do
-            let queryTestStream = FunGraph.Test.queryTreeAndPathsGAStreamTest timeout args
-                args = FunGraph.Test.queryTest_args test
-                timeout = 1000
-            eResult <- queryTestStream graph
-            result <- either handleError pure eResult
-            -- Fail unless we get at least 'maxCount' results.
-            -- If this fails then reduce maxCount to the minimum required to pass.
-            let resultCount = length result
-            unless (resultCount == 0 || maxCount <= resultCount) $
-              fail $ unwords
-                [ "Unnecessarily high maxCount."
-                , "maxCount is"
-                , show maxCount
-                , "but only got"
-                , show resultCount
-                , "results."
-                , "Results:"
-                , show $ map fst result
-                ]
-            Set.fromList (map fst $ traceFunction result)
-              `isSupersetOf`
-                FunGraph.Test.queryTest_expectedResult test
+          HSpec.describe "contained in top query results" $
+            forM_ queryFunctions $ \(name, queryFunction) ->
+              HSpec.it name $ do
+                eResult <- queryFunction args graph
+                result <- either handleError pure eResult
+                -- Fail unless we get at least 'maxCount' results.
+                -- If this fails then reduce maxCount to the minimum required to pass.
+                let resultCount = length result
+                unless (resultCount == 0 || maxCount <= resultCount) $
+                  fail $ unwords
+                    [ "Unnecessarily high maxCount."
+                    , "maxCount is"
+                    , show maxCount
+                    , "but only got"
+                    , show resultCount
+                    , "results."
+                    , "Results:"
+                    , show $ map fst result
+                    ]
+                Set.fromList (map fst $ traceFunction result)
+                  `isSupersetOf`
+                    FunGraph.Test.queryTest_expectedResult test
   pure $ HSpec.describe "Unit tests" $ do
     HSpec.describe "Expected result" $
       HSpec.describe "Stream" $
