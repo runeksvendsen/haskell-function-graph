@@ -28,12 +28,24 @@ main :: IO ()
 main =
   withTraceArg $ \shouldTrace ->
     FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
-      spec <- main' shouldTrace queryFunctions graph
+      spec <- main' shouldTrace (mkQueryFunctions shouldTrace) graph
       runHspecWithTraceTip shouldTrace spec
   where
-    queryFunctions = NE.fromList
-      [("Stream", queryTestStream)]
+    mkQueryFunctions shouldTrace = NE.fromList
+      [ ("Stream", queryTestStream)
+      , ("List", mkQueryTestList shouldTrace)
+      ]
       -- TODO: list-based query function
+
+    mkQueryTestList
+      :: Bool
+      -> FunGraph.Test.Args
+      -> FunGraph.Graph ST.RealWorld
+      -> IO QueryResults
+    mkQueryTestList shouldTrace args graph =
+      let runQueryFunction =
+            if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
+      in ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQueryFun_todo args
 
     queryTestStream
       :: FunGraph.Test.Args
@@ -104,8 +116,6 @@ main' shouldTrace queryFunctions graph = do
       forM_ FunGraph.Test.allTestCases testCase
   where
     traceFunction = if shouldTrace then traceResults else id
-
-    runQueryFunction = if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
 
     handleError = \case
       FunGraph.GraphActionError_NoSuchVertex v ->

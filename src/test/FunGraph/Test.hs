@@ -10,7 +10,7 @@ module FunGraph.Test
 , QueryTest(..), queryTest_runQuery, Args
 , PPFunctions(..)
   -- * TODO
-, queryTreeAndPathsGAStreamTest
+, queryTreeAndPathsGAStreamTest, queryTest_runQueryFun_todo
 )
 where
 
@@ -49,6 +49,14 @@ queryTest_runQuery
   -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
 queryTest_runQuery qt =
   queryTest_runQueryFun qt (queryTest_args qt)
+
+queryTest_runQueryFun_todo
+  :: Args
+  -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
+queryTest_runQueryFun_todo args =
+  mapQueryResult . snd <$> uncurry FunGraph.queryTreeAndPathsGA args
+  where
+    mapQueryResult = map (first $ PPFunctions . map void)
 
 mkTestCase
   :: Int
