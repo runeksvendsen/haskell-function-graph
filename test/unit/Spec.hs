@@ -101,8 +101,7 @@ main' shouldTrace queryFunctions graph = do
                     FunGraph.Test.queryTest_expectedResult test
   pure $ HSpec.describe "Unit tests" $ do
     HSpec.describe "Expected result" $
-      HSpec.describe "Stream" $
-        forM_ FunGraph.Test.allTestCases testCase
+      forM_ FunGraph.Test.allTestCases testCase
   where
     traceFunction = if shouldTrace then traceResults else id
 
