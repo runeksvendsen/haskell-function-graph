@@ -32,10 +32,9 @@ main =
       runHspecWithTraceTip shouldTrace spec
   where
     mkQueryFunctions shouldTrace = NE.fromList
-      [ ("Stream", queryTestStream)
+      [ ("Stream", FunGraph.Test.queryTreeAndPathsGAStreamTest 1000)
       , ("List", mkQueryTestList shouldTrace)
       ]
-      -- TODO: list-based query function
 
     mkQueryTestList
       :: Bool
@@ -45,16 +44,7 @@ main =
     mkQueryTestList shouldTrace args graph =
       let runQueryFunction =
             if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
-      in ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQueryFun_todo args
-
-    queryTestStream
-      :: FunGraph.Test.Args
-      -> FunGraph.Graph ST.RealWorld
-      -> IO QueryResults
-    queryTestStream =
-      FunGraph.Test.queryTreeAndPathsGAStreamTest timeout
-      where
-        timeout = 1000
+      in ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTreeAndPathsGAListTest args
 
     traceCLIArg :: String
     traceCLIArg = "--trace"

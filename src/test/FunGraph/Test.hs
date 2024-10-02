@@ -6,11 +6,13 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# HLINT ignore "Use fmap" #-}
 module FunGraph.Test
-( allTestCases
-, QueryTest(..), queryTest_runQuery, Args
+( -- * Test cases
+  allTestCases
+, QueryTest(..), Args
+  -- * Helper types
 , PPFunctions(..)
-  -- * TODO
-, queryTreeAndPathsGAStreamTest, queryTest_runQueryFun_todo
+  -- * Query functions
+, queryTreeAndPathsGAStreamTest, queryTreeAndPathsGAListTest
 )
 where
 
@@ -32,28 +34,16 @@ import qualified Streaming as S
 
 data QueryTest = QueryTest
     { queryTest_name :: String
-    , queryTest_runQueryFun
-        :: forall s v meta.
-           (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
-        => Args
-        -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
     , queryTest_args :: Args
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
 
 type Args = (Int, (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (maxCount, (src, dst))
 
--- | Apply 'queryTest_runQueryFun' to 'queryTest_args'
-queryTest_runQuery
-  :: QueryTest
-  -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
-queryTest_runQuery qt =
-  queryTest_runQueryFun qt (queryTest_args qt)
-
-queryTest_runQueryFun_todo
+queryTreeAndPathsGAListTest
   :: Args
   -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
-queryTest_runQueryFun_todo args =
+queryTreeAndPathsGAListTest args =
   mapQueryResult . snd <$> uncurry FunGraph.queryTreeAndPathsGA args
   where
     mapQueryResult = map (first $ PPFunctions . map void)
@@ -66,14 +56,10 @@ mkTestCase
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQueryFun = \args ->
-            mapQueryResult . snd <$> uncurry FunGraph.queryTreeAndPathsGA args
         , queryTest_args = (maxCount, (fst from, fst to))
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
-    mapQueryResult = map (first $ PPFunctions . map void)
-
     fns :: [T.Text] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)
 
@@ -95,24 +81,16 @@ queryTreeAndPathsGAStreamTest timeout (maxCount, srcDst) graph =
     S.lift . S.toList_ =<< streamExcept
   where
     streamExcept =
-      S.concat . S.map toPPFunctions <$>
-        FunGraph.queryTreeAndPathsGAStream graph timeout maxCount srcDst
+      S.concat . S.map toPPFunctions <$> queryTreeAndPathsGAStream
+
+    queryTreeAndPathsGAStream =
+      S.map (\tree -> (tree, FunGraph.queryResultTreeToPaths maxCount srcDst [tree]))
+        <$> FunGraph.queryTreeTimeoutIO graph timeout maxCount srcDst
 
     toPPFunctions
       :: (([NE.NonEmpty FunGraph.TypedFunction], Double), [([FunGraph.TypedFunction], Double)])
       -> [(PPFunctions, Double)]
     toPPFunctions = map (first $ PPFunctions . map void) . snd
-
--- IO
---      (Either
---         (GraphActionError FullyQualifiedType) [(PPFunctions, Double)])
-
--- TODO:
-    --   queryTest_runQueryFun
-    --     :: forall s v meta.
-    --        (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
-    --     => Args
-    --     -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
 
 allTestCases :: [QueryTest]
 allTestCases =

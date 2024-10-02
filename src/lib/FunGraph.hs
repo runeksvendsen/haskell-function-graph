@@ -15,7 +15,7 @@
 --   TODO: Prioritize functions from _existing_ dependencies. Ie. take a list of dependencies for which functions are prioritized higher.
 module FunGraph
   ( -- * Queries
-    queryPathsGA, queryTreeGA, queryTreeAndPathsGA, queryTreeAndPathsGAStream
+    queryPathsGA, queryTreeGA, queryTreeAndPathsGA
   , queryTreeTimeoutIO, queryTreeTimeoutIOTrace
   , GraphAction, runGraphAction, runGraphActionTrace, GraphActionError(..)
     -- * Conversions
@@ -103,24 +103,6 @@ queryTreeAndPathsGA
 queryTreeAndPathsGA maxCount srcDst =
   queryTreeGA maxCount srcDst <&> \tree ->
       (tree, queryResultTreeToPaths maxCount srcDst tree)
-
-queryTreeAndPathsGAStream
-  :: ( v ~ FullyQualifiedType
-     )
-  => DG.Digraph RealWorld FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> Data.Time.NominalDiffTime -- ^ timeout
-  -> Int -- ^ max count
-  -> (v, v) -- ^ (src, dst)
-  -> ExceptT (GraphActionError v) IO
-      (S.Stream
-        (S.Of (([NE.NonEmpty TypedFunction], Double), [([TypedFunction], Double)]))
-        IO
-        (Maybe ())
-      )
-queryTreeAndPathsGAStream graph timeout maxCount srcDst =
-  let blah tree =
-        (tree, queryResultTreeToPaths maxCount srcDst [tree])
-  in S.map blah <$> queryTreeTimeoutIO graph timeout maxCount srcDst
 
 queryPathsGA
   :: ( v ~ FullyQualifiedType
