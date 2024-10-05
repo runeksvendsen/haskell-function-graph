@@ -28,24 +28,9 @@ main :: IO ()
 main =
   withTraceArg $ \shouldTrace ->
     FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
-      spec <- main' shouldTrace (mkQueryFunctions shouldTrace) graph
+      spec <- main' shouldTrace (FunGraph.Test.mkQueryFunctions shouldTrace) graph
       runHspecWithTraceTip shouldTrace spec
   where
-    mkQueryFunctions shouldTrace = NE.fromList
-      [ ("Stream", FunGraph.Test.queryTreeAndPathsGAStreamTest 1000)
-      , ("List", mkQueryTestList shouldTrace)
-      ]
-
-    mkQueryTestList
-      :: Bool
-      -> FunGraph.Test.Args
-      -> FunGraph.Graph ST.RealWorld
-      -> IO QueryResults
-    mkQueryTestList shouldTrace args graph =
-      let runQueryFunction =
-            if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
-      in ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTreeAndPathsGAListTest args
-
     traceCLIArg :: String
     traceCLIArg = "--trace"
 
@@ -59,12 +44,9 @@ main =
         putStrLn $ "\nTest suite had failures. Run again with the " <> traceCLIArg <> " argument to print tracing information."
       HSpec.evaluateSummary summary
 
-type QueryResults =
-  Either (FunGraph.GraphActionError FunGraph.FullyQualifiedType) [(FunGraph.Test.PPFunctions, Double)]
-
 main'
   :: Bool
-  -> NE.NonEmpty (String, FunGraph.Test.Args -> FunGraph.Graph ST.RealWorld -> IO QueryResults)
+  -> NE.NonEmpty (String, FunGraph.Test.Args -> FunGraph.Graph ST.RealWorld -> IO FunGraph.Test.QueryResults)
   -> FunGraph.Graph ST.RealWorld
   -> IO HSpec.Spec
 main' shouldTrace queryFunctions graph = do

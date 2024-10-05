@@ -11,8 +11,9 @@ module FunGraph.Test
 , QueryTest(..), Args
   -- * Helper types
 , PPFunctions(..)
+, QueryResults
   -- * Query functions
-, queryTreeAndPathsGAStreamTest, queryTreeAndPathsGAListTest
+, mkQueryFunctions
 )
 where
 
@@ -91,6 +92,27 @@ queryTreeAndPathsGAStreamTest timeout (maxCount, srcDst) graph =
       :: (([NE.NonEmpty FunGraph.TypedFunction], Double), [([FunGraph.TypedFunction], Double)])
       -> [(PPFunctions, Double)]
     toPPFunctions = map (first $ PPFunctions . map void) . snd
+
+type QueryResults =
+  Either (FunGraph.GraphActionError FunGraph.FullyQualifiedType) [(FunGraph.Test.PPFunctions, Double)]
+
+-- | The query functions we want to test
+mkQueryFunctions
+  :: Bool -- ^ enable tracing?
+  -> NE.NonEmpty (String, Args -> FunGraph.Graph ST.RealWorld -> IO QueryResults)
+mkQueryFunctions shouldTrace = NE.fromList
+  [ ("Stream", FunGraph.Test.queryTreeAndPathsGAStreamTest 1000)
+  , ("List", queryTestList)
+  ]
+  where
+    queryTestList
+      :: FunGraph.Test.Args
+      -> FunGraph.Graph ST.RealWorld
+      -> IO QueryResults
+    queryTestList args graph =
+      let runQueryFunction =
+            if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
+      in ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTreeAndPathsGAListTest args
 
 allTestCases :: [QueryTest]
 allTestCases =
