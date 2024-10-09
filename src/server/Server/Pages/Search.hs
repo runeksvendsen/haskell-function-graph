@@ -50,11 +50,14 @@ data SearchEnv = SearchEnv
 -- | TODO
 data SearchConfig = SearchConfig
   { searchConfigTimeout :: !Data.Time.Clock.NominalDiffTime
+  , searchConfigTrace :: !Bool
+  -- ^ Make the server print tracing information for each search query
   }
 
 defaultSearchConfig :: SearchConfig
 defaultSearchConfig = SearchConfig
   { searchConfigTimeout = 0.1
+  , searchConfigTrace = False
   }
 
 createSearchEnv
@@ -223,9 +226,14 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         pure
         (lookupVertex txt)
 
+    queryTreeTimeoutIO =
+      if searchConfigTrace cfg
+        then FunGraph.queryTreeTimeoutIOTrace
+        else FunGraph.queryTreeTimeoutIO
+
     query' srcDst =
       ET.runExceptT $
-          FunGraph.queryTreeTimeoutIO
+          queryTreeTimeoutIO
             graph
             timeout
             maxCount
