@@ -43,16 +43,18 @@ main = do
   System.IO.Temp.withSystemTempDirectory "haskell-function-graph-test-web" $ \failureReportFileDir -> do
     let failureReportFile = failureReportFileDir <> "/failure.report"
         setConfigFailureReport cfg = cfg{HSpec.configFailureReport = Just failureReportFile}
-    summary <- withSpec Server.defaultSearchConfig
+    summary <- withSpec defaultSearchConfig
       (HSpec.hspecWithResult $ setConfigFailureReport config)
     unless (HSpec.isSuccess summary) $ do
       putStrLn "\nTest suite had failures. Rerunning failed test cases with tracing enabled..."
       let mkRerunConfig cfg =
             cfg{HSpec.configRerun = True, HSpec.configConcurrentJobs = Just 1} -- tracing output is difficult to read if test cases are run in parallel
-      void $ withSpec Server.defaultSearchConfig{Server.searchConfigTrace = Just traceFun}
+      void $ withSpec defaultSearchConfig{Server.searchConfigTrace = Just traceFun}
         (HSpec.hspecWithResult $ mkRerunConfig $ setConfigFailureReport config)
     HSpec.evaluateSummary summary
   where
+    defaultSearchConfig = Server.defaultSearchConfig{Server.searchConfigTimeout = 100}
+
     traceFun str =
       let color color' = concat
             [ ANSI.setSGRCode [ANSI.SetColor ANSI.Background ANSI.Dull color']
