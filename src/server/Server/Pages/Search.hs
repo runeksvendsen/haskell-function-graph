@@ -40,6 +40,7 @@ import qualified Streaming.Prelude as S
 import qualified Data.BalancedStream
 import Control.Monad (when)
 import qualified Data.Time.Clock
+import qualified Control.Monad.ST
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -50,14 +51,14 @@ data SearchEnv = SearchEnv
 -- | TODO
 data SearchConfig = SearchConfig
   { searchConfigTimeout :: !Data.Time.Clock.NominalDiffTime
-  , searchConfigTrace :: !Bool
-  -- ^ Make the server print tracing information for each search query
+  , searchConfigTrace :: !(Maybe (String -> Control.Monad.ST.ST Control.Monad.ST.RealWorld ()))
+  -- ^ Optionally print tracing information for each search query
   }
 
 defaultSearchConfig :: SearchConfig
 defaultSearchConfig = SearchConfig
   { searchConfigTimeout = 0.1
-  , searchConfigTrace = False
+  , searchConfigTrace = Nothing
   }
 
 createSearchEnv
@@ -227,9 +228,10 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         (lookupVertex txt)
 
     queryTreeTimeoutIO =
-      if searchConfigTrace cfg
-        then FunGraph.queryTreeTimeoutIOTrace
-        else FunGraph.queryTreeTimeoutIO
+      maybe
+        FunGraph.queryTreeTimeoutIO
+        FunGraph.queryTreeTimeoutIOTrace
+        (searchConfigTrace cfg)
 
     query' srcDst =
       ET.runExceptT $

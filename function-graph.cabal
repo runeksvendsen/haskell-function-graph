@@ -210,4 +210,6 @@ executable test-web
     , async
     , streaming
     , html-parse
+    , ansi-terminal
+    , temporary
   default-language: Haskell2010

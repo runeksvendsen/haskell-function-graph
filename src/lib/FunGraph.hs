@@ -61,6 +61,7 @@ import qualified Streaming as S
 import qualified Control.Monad.ST as ST
 import qualified Streaming.Prelude as S
 import qualified Streaming.Prelude.Extras
+import qualified GHC.IO.Unsafe
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -171,14 +172,15 @@ queryTreeTimeoutIOTrace
   :: ( v ~ FullyQualifiedType
      , meta ~ NE.NonEmpty TypedFunction
      )
-  => DG.Digraph RealWorld v meta
+  => (String -> ST RealWorld ())
+  -> DG.Digraph RealWorld v meta
   -> Data.Time.NominalDiffTime
   -> Int
   -> (v, v)
   -> ExceptT (GraphActionError v) IO
       (S.Stream (S.Of ([meta], Double)) IO (Maybe ()) )
-queryTreeTimeoutIOTrace g =
-  queryTreeTimeoutIO' g $ Dijkstra.runDijkstraTraceGeneric (>>= traceFunDebug)
+queryTreeTimeoutIOTrace traceFun g =
+  queryTreeTimeoutIO' g $ Dijkstra.runDijkstraTraceGeneric (>>= traceFunDebugGeneric traceFun)
 
 queryTreeTimeoutIO'
   :: forall v meta.
@@ -285,22 +287,23 @@ queryTreeGA maxCount (src, dst) =
         edgeWeightNE =
           minimum $ map (functionWeight (src, dst)) (NE.toList functions)
 
-traceFunDebug
-  :: Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
+traceFunDebugGeneric
+  :: (String -> ST s ())
+  -> Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
   -> ST s ()
-traceFunDebug = \case
-    Dijkstra.TraceEvent_Init srcVertex _ -> traceM . T.unpack $ T.unwords
+traceFunDebugGeneric traceFun = \case
+    Dijkstra.TraceEvent_Init srcVertex _ -> traceFun . T.unpack $ T.unwords
       [ "Starting Bellman-Ford for source vertex"
       , renderFullyQualifiedType (fst srcVertex)
       ]
 
     Dijkstra.TraceEvent_Push edge weight pathTo ->
-      maybe (pure ()) traceM (traceInterestingPush edge weight pathTo)
+      maybe (pure ()) traceFun (traceInterestingPush edge weight pathTo)
 
     Dijkstra.TraceEvent_Pop v weight pathTo ->
-      maybe (pure ()) traceM (traceInterestingPop v weight pathTo)
+      maybe (pure ()) traceFun (traceInterestingPop v weight pathTo)
 
-    Dijkstra.TraceEvent_FoundPath number weight path -> traceM $ unwords
+    Dijkstra.TraceEvent_FoundPath number weight path -> traceFun $ unwords
         [ "Found path no."
         , show number
         , "with length"
@@ -312,6 +315,11 @@ traceFunDebug = \case
               renderTypeSig = T.unpack . showTypeSig . typedFunctionsPathTypes
           in unlines $ map (\fn -> "\t" <> renderComposedFunctionsStr fn <> " :: " <> renderTypeSig fn) allPaths
         ]
+
+    Dijkstra.TraceEvent_Done srcVertex -> traceFun . T.unpack $ T.unwords
+      [ "Terminating Bellman-Ford for source vertex"
+      , renderFullyQualifiedType (fst srcVertex)
+      ]
 
     _ -> pure ()
   where
@@ -392,6 +400,12 @@ traceFunDebug = \case
           , showInterestingPath interestingPath
           ]
         else Nothing
+
+traceFunDebug
+  :: Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
+  -> ST s ()
+traceFunDebug =
+  traceFunDebugGeneric traceM
 
 data GraphActionError v
   = GraphActionError_NoSuchVertex v
