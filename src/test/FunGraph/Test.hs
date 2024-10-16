@@ -6,9 +6,14 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# HLINT ignore "Use fmap" #-}
 module FunGraph.Test
-( allTestCases
-, QueryTest(..), queryTest_runQuery
+( -- * Test cases
+  allTestCases
+, QueryTest(..), Args
+  -- * Helper types
 , PPFunctions(..)
+, QueryResults
+  -- * Query functions
+, mkQueryFunctions
 )
 where
 
@@ -22,26 +27,28 @@ import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
 import Data.Bifunctor (first)
 import qualified Data.Text as T
+import qualified Control.Monad.Trans.Except as Except
+import qualified Streaming.Prelude as S
+import qualified Control.Monad.ST as ST
+import qualified Data.Time
+import qualified Streaming as S
 
 data QueryTest = QueryTest
     { queryTest_name :: String
-    , queryTest_runQueryFun
-        :: forall s v meta.
-           (v ~ FunGraph.FullyQualifiedType, meta ~ NE.NonEmpty FunGraph.TypedFunction)
-        => Args
-        -> FunGraph.GraphAction s v meta [(PPFunctions, Double)]
     , queryTest_args :: Args
     , queryTest_expectedResult :: Set.Set PPFunctions
     }
 
 type Args = (Int, (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (maxCount, (src, dst))
 
--- | Apply 'queryTest_runQueryFun' to 'queryTest_args'
-queryTest_runQuery
-  :: QueryTest
+-- | Test 'FunGraph.queryTreeAndPathsGA'
+queryTreeAndPathsGAListTest
+  :: Args
   -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
-queryTest_runQuery qt =
-  queryTest_runQueryFun qt (queryTest_args qt)
+queryTreeAndPathsGAListTest args =
+  mapQueryResult . snd <$> uncurry FunGraph.queryTreeAndPathsGA args
+  where
+    mapQueryResult = map (first $ PPFunctions . map void)
 
 mkTestCase
   :: Int
@@ -51,14 +58,10 @@ mkTestCase
 mkTestCase maxCount (from, to) expectedList =
     QueryTest
         { queryTest_name = unwords [snd from, "to", snd to]
-        , queryTest_runQueryFun = \args ->
-            mapQueryResult . snd <$> uncurry FunGraph.queryTreeAndPathsGA args
         , queryTest_args = (maxCount, (fst from, fst to))
         , queryTest_expectedResult = Set.fromList $ fns expectedList
         }
   where
-    mapQueryResult = map (first $ PPFunctions . map void)
-
     fns :: [T.Text] -> [PPFunctions]
     fns = map (PPFunctions . NE.toList . fn)
 
@@ -67,6 +70,51 @@ mkTestCase maxCount (from, to) expectedList =
       (error $ "parseComposedFunctions: bad input: " <> T.unpack bs)
       id
       (FunGraph.parseComposedFunctions bs)
+
+-- | Test 'FunGraph.queryTreeTimeoutIO'
+queryTreeAndPathsGAStreamTest
+  :: ( v ~ FunGraph.FullyQualifiedType
+     )
+  => Data.Time.NominalDiffTime -- ^ timeout
+  -> Args
+  -> FunGraph.Digraph ST.RealWorld FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction)
+  -> IO (Either (FunGraph.GraphActionError v) [(PPFunctions, Double)])
+queryTreeAndPathsGAStreamTest timeout (maxCount, srcDst) graph =
+  Except.runExceptT $
+    S.lift . S.toList_ =<< streamExcept
+  where
+    streamExcept =
+      S.concat . S.map toPPFunctions <$> queryTreeAndPathsGAStream
+
+    queryTreeAndPathsGAStream =
+      S.map (\tree -> (tree, FunGraph.queryResultTreeToPaths maxCount srcDst [tree]))
+        <$> FunGraph.queryTreeTimeoutIO graph timeout maxCount srcDst
+
+    toPPFunctions
+      :: (([NE.NonEmpty FunGraph.TypedFunction], Double), [([FunGraph.TypedFunction], Double)])
+      -> [(PPFunctions, Double)]
+    toPPFunctions = map (first $ PPFunctions . map void) . snd
+
+type QueryResults =
+  Either (FunGraph.GraphActionError FunGraph.FullyQualifiedType) [(FunGraph.Test.PPFunctions, Double)]
+
+-- | The query functions we want to test
+mkQueryFunctions
+  :: Bool -- ^ enable tracing?
+  -> NE.NonEmpty (String, Args -> FunGraph.Graph ST.RealWorld -> IO QueryResults)
+mkQueryFunctions shouldTrace = NE.fromList
+  [ ("Stream", FunGraph.Test.queryTreeAndPathsGAStreamTest 1000)
+  , ("List", queryTestList)
+  ]
+  where
+    queryTestList
+      :: FunGraph.Test.Args
+      -> FunGraph.Graph ST.RealWorld
+      -> IO QueryResults
+    queryTestList args graph =
+      let runQueryFunction =
+            if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
+      in ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTreeAndPathsGAListTest args
 
 allTestCases :: [QueryTest]
 allTestCases =
@@ -105,7 +153,7 @@ case3 =
 
 case4 :: QueryTest
 case4 =
-  mkTestCase 100
+  mkTestCase 45
     (strictByteString, lazyText)
     [ "text-2.0.2:Data.Text.Lazy.pack . bytestring-0.11.4.0:Data.ByteString.Char8.unpack"
     , "text-2.0.2:Data.Text.Lazy.fromStrict . text-2.0.2:Data.Text.Encoding.decodeASCII"

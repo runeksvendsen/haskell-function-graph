@@ -3,7 +3,9 @@
 {-# HLINT ignore "Use infix" #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Main where
+module Main
+(main)
+where
 
 import FunGraph.Test.Util
 import FunGraph.Test.ExtraArgs
@@ -13,20 +15,17 @@ import qualified Test.Hspec as HSpec
 import qualified Test.Hspec.Runner as HSpec
 import qualified Data.Set as Set
 import Debug.Trace (trace)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, unless)
 import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified Data.List.NonEmpty as NE
 import Data.Functor (void)
 
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
-
 main :: IO ()
 main =
   withTraceArg $ \shouldTrace ->
-    FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
-      spec <- main' shouldTrace graph
+    FunGraph.withGraphFromFile FunGraph.defaultBuildConfig FunGraph.Test.Util.testDataFileName $ \graph -> do
+      spec <- main' shouldTrace (FunGraph.Test.mkQueryFunctions shouldTrace) graph
       runHspecWithTraceTip shouldTrace spec
   where
     traceCLIArg :: String
@@ -44,13 +43,14 @@ main =
 
 main'
   :: Bool
+  -> NE.NonEmpty (String, FunGraph.Test.Args -> FunGraph.Graph ST.RealWorld -> IO FunGraph.Test.QueryResults)
   -> FunGraph.Graph ST.RealWorld
   -> IO HSpec.Spec
-main' shouldTrace graph = do
+main' shouldTrace queryFunctions graph = do
   graphEdgeSet <- ST.stToIO (DG.toEdges graph)
   let graphEdges = Set.map void $ Set.fromList $ concat $ Set.map (NE.toList . DG.eMeta) graphEdgeSet
   let testCase test =
-        let (maxCount, _) = FunGraph.Test.queryTest_args test
+        let args@(maxCount, _) = FunGraph.Test.queryTest_args test
         in HSpec.describe (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $ do
           HSpec.it "edges are contained in the graph" $ do
             let ppFunctions = Set.fromList $
@@ -58,19 +58,33 @@ main' shouldTrace graph = do
                   Set.toList $
                   FunGraph.Test.queryTest_expectedResult test
             graphEdges `isSupersetOf` ppFunctions
-          HSpec.it "contained in top query results" $ do
-            eResult <- ST.stToIO $ runQueryFunction graph $ FunGraph.Test.queryTest_runQuery test
-            result <- either handleError pure eResult
-            Set.fromList (map fst $ traceFunction result)
-              `isSupersetOf`
-                FunGraph.Test.queryTest_expectedResult test
+          HSpec.describe "contained in top query results" $
+            forM_ queryFunctions $ \(name, queryFunction) ->
+              HSpec.it name $ do
+                eResult <- queryFunction args graph
+                result <- either handleError pure eResult
+                -- Fail unless we get at least 'maxCount' results.
+                -- If this fails then reduce maxCount to the minimum required to pass.
+                let resultCount = length result
+                unless (resultCount == 0 || maxCount <= resultCount) $
+                  fail $ unwords
+                    [ "Unnecessarily high maxCount."
+                    , "maxCount is"
+                    , show maxCount
+                    , "but only got"
+                    , show resultCount
+                    , "results."
+                    , "Results:"
+                    , show $ map fst result
+                    ]
+                Set.fromList (map fst $ traceFunction result)
+                  `isSupersetOf`
+                    FunGraph.Test.queryTest_expectedResult test
   pure $ HSpec.describe "Unit tests" $ do
     HSpec.describe "Expected result" $
       forM_ FunGraph.Test.allTestCases testCase
   where
     traceFunction = if shouldTrace then traceResults else id
-
-    runQueryFunction = if shouldTrace then FunGraph.runGraphActionTrace else FunGraph.runGraphAction
 
     handleError = \case
       FunGraph.GraphActionError_NoSuchVertex v ->

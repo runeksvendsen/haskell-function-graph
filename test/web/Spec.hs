@@ -5,7 +5,7 @@
 module Main (main) where
 
 import FunGraph.Test.Util
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -26,17 +26,52 @@ import Data.Maybe (mapMaybe)
 import qualified Data.List.NonEmpty as NE
 import qualified Types
 import qualified Server.Api
-
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
+import qualified GHC.IO.Unsafe
+import qualified System.Console.ANSI as ANSI
+import qualified System.IO.Temp
+import qualified System.Environment
+import qualified Test.Hspec.Runner as HSpec
+import Data.Functor (void)
 
 main :: IO ()
-main =
-  Server.withHandlers logger Server.Pages.Search.defaultSearchConfig mempty testDataFileName $ \handlers ->
+main = do
+  config <- System.Environment.getArgs
+    >>= HSpec.readConfig HSpec.defaultConfig
+  System.IO.Temp.withSystemTempDirectory "haskell-function-graph-test-web" $ \failureReportFileDir -> do
+    let failureReportFile = failureReportFileDir <> "/failure.report"
+        setConfigFailureReport cfg = cfg{HSpec.configFailureReport = Just failureReportFile}
+    summary <- withSpec defaultSearchConfig
+      (HSpec.hspecWithResult $ setConfigFailureReport config)
+    unless (HSpec.isSuccess summary) $ do
+      putStrLn "\nTest suite had failures. Rerunning failed test cases with tracing enabled..."
+      let mkRerunConfig cfg =
+            cfg{HSpec.configRerun = True, HSpec.configConcurrentJobs = Just 1} -- tracing output is difficult to read if test cases are run in parallel
+      void $ withSpec defaultSearchConfig{Server.searchConfigTrace = Just traceFun}
+        (HSpec.hspecWithResult $ mkRerunConfig $ setConfigFailureReport config)
+    HSpec.evaluateSummary summary
+  where
+    defaultSearchConfig = Server.defaultSearchConfig{Server.searchConfigTimeout = 100}
+
+    traceFun str =
+      let color color' = concat
+            [ ANSI.setSGRCode [ANSI.SetColor ANSI.Background ANSI.Dull color']
+            , str
+            , ANSI.setSGRCode [ANSI.Reset]
+            ]
+      in pure $
+        GHC.IO.Unsafe.unsafePerformIO $ do
+          putStrLn $ color ANSI.Red
+
+withSpec
+  :: Server.Pages.Search.SearchConfig
+  -> (HSpec.Spec -> IO a)
+  -> IO a
+withSpec searchConfig f =
+  Server.withHandlers logger searchConfig mempty testDataFileName $ \handlers ->
     runWarpTestRandomPort (Server.app handlers) $ \port -> do
       queryFun <- mkQueryFunction port
       let runQuery = fmap parsePPFunctions <$> queryFun id (Just Server.Api.NoGraph)
-      main' runQuery >>= HSpec.hspec
+      main' runQuery >>= f
   where
     logger = const $ pure ()
 

@@ -30,6 +30,7 @@ let
       servant-errors = servant-errors;
     };
 
+  # TODO: run 'test-web' executable as part of build and fail build on non-zero exit code
   function-graph = nixpkgs.pkgs.haskell.lib.doBenchmark (
     nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "function-graph" ./. args
   );

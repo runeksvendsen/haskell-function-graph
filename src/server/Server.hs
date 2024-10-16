@@ -6,7 +6,7 @@ module Server
   ( main
   , app
   , withHandlers
-  , Server.Pages.Search.defaultSearchConfig
+  , Server.Pages.Search.defaultSearchConfig, Server.Pages.Search.SearchConfig(..)
   )
   where
 
