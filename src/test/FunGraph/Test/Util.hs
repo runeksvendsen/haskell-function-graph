@@ -10,6 +10,7 @@ module FunGraph.Test.Util
 , runWarpTestRandomPort
 , isSupersetOf
 , StreamIOHtml
+, testDataFileName
 )
 where
 
@@ -39,6 +40,9 @@ import Servant.HTML.Lucid (HTML)
 import Server.HtmlStream (HtmlStream, toStream)
 import Test.Hspec.Expectations.Pretty (shouldBe)
 import Lucid.Base (Html)
+
+testDataFileName :: FilePath
+testDataFileName = "data/all3.json"
 
 isSupersetOf :: (Show a, Ord a) => Set.Set a -> Set.Set a -> IO ()
 isSupersetOf actual expected =

@@ -41,6 +41,7 @@ data QueryTest = QueryTest
 
 type Args = (Int, (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (maxCount, (src, dst))
 
+-- | Test 'FunGraph.queryTreeAndPathsGA'
 queryTreeAndPathsGAListTest
   :: Args
   -> FunGraph.GraphAction s FunGraph.FullyQualifiedType (NE.NonEmpty FunGraph.TypedFunction) [(PPFunctions, Double)]
@@ -70,6 +71,7 @@ mkTestCase maxCount (from, to) expectedList =
       id
       (FunGraph.parseComposedFunctions bs)
 
+-- | Test 'FunGraph.queryTreeTimeoutIO'
 queryTreeAndPathsGAStreamTest
   :: ( v ~ FunGraph.FullyQualifiedType
      )

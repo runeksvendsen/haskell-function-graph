@@ -1,5 +1,6 @@
-module Main where
-
+module Main
+(main)
+where
 import Criterion.Main
 import qualified FunGraph
 import qualified FunGraph.Test
@@ -7,13 +8,11 @@ import qualified Control.Monad.ST as ST
 import Data.Functor (void, (<&>))
 import Control.Monad ((<=<))
 import qualified Data.List.NonEmpty as NE
-
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
+import qualified FunGraph.Test.Util
 
 main :: IO ()
 main = do
-  graphData <- readGraphData testDataFileName
+  graphData <- readGraphData FunGraph.Test.Util.testDataFileName
   mutGraph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
   frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
   defaultMain
@@ -29,8 +28,8 @@ main = do
   where
     queryPaths mutGraph test =
       let args@(maxCount, _) = FunGraph.Test.queryTest_args test
-          blahName = FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount
-      in bgroup blahName $ NE.toList $
+          nameWithMaxCount = FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount
+      in bgroup nameWithMaxCount $ NE.toList $
         FunGraph.Test.mkQueryFunctions False <&> \(queryFunctionName, queryFunction) ->
           bench queryFunctionName $
             nfAppIO (queryFunction args) mutGraph

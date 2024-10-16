@@ -26,9 +26,6 @@ import Control.Monad (when)
 import Data.Maybe (isJust)
 import qualified Data.ByteString.Lazy as BSL
 
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
-
 -- NOTE: If a benchmark times out then increase this limit
 searchConfig :: Server.Pages.Search.SearchConfig
 searchConfig = Server.Pages.Search.defaultSearchConfig
@@ -37,7 +34,7 @@ searchConfig = Server.Pages.Search.defaultSearchConfig
 
 main :: IO ()
 main =
-  Server.withHandlers logger searchConfig mempty testDataFileName $ \handlers ->
+  Server.withHandlers logger searchConfig mempty FunGraph.Test.Util.testDataFileName $ \handlers ->
     runWarpTestRandomPort (Server.app handlers) $ \port ->
       mkQueryFunction port >>= runTests
   where

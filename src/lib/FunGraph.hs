@@ -61,7 +61,6 @@ import qualified Streaming as S
 import qualified Control.Monad.ST as ST
 import qualified Streaming.Prelude as S
 import qualified Streaming.Prelude.Extras
-import qualified GHC.IO.Unsafe
 
 -- | Convert a shortest path tree into a list of shortests paths.
 --
@@ -172,7 +171,7 @@ queryTreeTimeoutIOTrace
   :: ( v ~ FullyQualifiedType
      , meta ~ NE.NonEmpty TypedFunction
      )
-  => (String -> ST RealWorld ())
+  => (String -> ST RealWorld ()) -- ^ Trace function
   -> DG.Digraph RealWorld v meta
   -> Data.Time.NominalDiffTime
   -> Int
@@ -288,7 +287,7 @@ queryTreeGA maxCount (src, dst) =
           minimum $ map (functionWeight (src, dst)) (NE.toList functions)
 
 traceFunDebugGeneric
-  :: (String -> ST s ())
+  :: (String -> ST s ()) -- ^ Trace function
   -> Dijkstra.TraceEvent FullyQualifiedType (NE.NonEmpty TypedFunction) Double
   -> ST s ()
 traceFunDebugGeneric traceFun = \case

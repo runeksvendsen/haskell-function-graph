@@ -21,13 +21,10 @@ import qualified Data.Graph.Digraph as DG
 import qualified Data.List.NonEmpty as NE
 import Data.Functor (void)
 
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
-
 main :: IO ()
 main =
   withTraceArg $ \shouldTrace ->
-    FunGraph.withGraphFromFile FunGraph.defaultBuildConfig testDataFileName $ \graph -> do
+    FunGraph.withGraphFromFile FunGraph.defaultBuildConfig FunGraph.Test.Util.testDataFileName $ \graph -> do
       spec <- main' shouldTrace (FunGraph.Test.mkQueryFunctions shouldTrace) graph
       runHspecWithTraceTip shouldTrace spec
   where

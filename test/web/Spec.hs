@@ -33,9 +33,6 @@ import qualified System.Environment
 import qualified Test.Hspec.Runner as HSpec
 import Data.Functor (void)
 
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
-
 main :: IO ()
 main = do
   config <- System.Environment.getArgs
