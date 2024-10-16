@@ -17,7 +17,7 @@ main = do
       port <- maybe (fail $ "invalid port number: " <> portStr) pure (readMaybe portStr)
       pure (port, graphDataFileName)
     _ -> fail "Expected exactly two arguments: (1) port number; (2) graph JSON data filename"
-  Server.main appendToHead port graphDataFileName
+  Server.main Server.defaultSearchConfig appendToHead port graphDataFileName
   where
     appendToHead = style_ $ TE.decodeUtf8 cssBS
     cssBS = $(Data.FileEmbed.makeRelativeToProject "css/chota.css" >>= Data.FileEmbed.embedFile)

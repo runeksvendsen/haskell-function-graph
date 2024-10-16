@@ -6,15 +6,12 @@ where
 
 import qualified System.Process as Proc
 import qualified Data.Text.Lazy as LT
-import qualified Data.ByteString as BS
 import qualified System.Exit as Exit
 import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy.Char8
 import qualified Data.Text.Lazy.Encoding
-import qualified Data.ByteString.Char8
 import Data.Bifunctor (first)
-import qualified System.IO
-import qualified FunGraph.Util
+import qualified Data.Text as T
 
 dotExe :: FilePath
 dotExe = "dot"
@@ -62,7 +59,7 @@ healthCheck logStr = do
 
 renderDotGraph
   :: LT.Text
-  -> IO (Either String BS.ByteString)
+  -> IO (Either String T.Text)
 renderDotGraph dot = do
   eRes <- runDotExe
     [ "-v" -- verbose
@@ -72,4 +69,4 @@ renderDotGraph dot = do
     (Data.ByteString.Lazy.Char8.unpack . Data.Text.Lazy.Encoding.encodeUtf8 $ dot)
   pure $ do
     (_, stdout, _) <- eRes
-    pure $ Data.ByteString.Char8.pack stdout
+    pure $ T.pack stdout

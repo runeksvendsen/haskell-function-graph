@@ -12,6 +12,14 @@ nix-shell --run 'cabal run server -- 8080 data/all3.json'
 
 and visit http://localhost:8080.
 
+### Using Nix
+
+Run
+
+```
+$(nix-build --no-out-link)/bin/server-wrapped 8080 data/all3.json
+```
+
 ## Demo
 
 ![](docs/img/demo.gif)

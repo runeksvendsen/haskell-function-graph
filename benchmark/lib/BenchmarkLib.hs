@@ -1,18 +1,18 @@
-module Main where
-
+module Main
+(main)
+where
 import Criterion.Main
 import qualified FunGraph
 import qualified FunGraph.Test
 import qualified Control.Monad.ST as ST
-import Data.Functor (void)
+import Data.Functor (void, (<&>))
 import Control.Monad ((<=<))
-
-testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
+import qualified Data.List.NonEmpty as NE
+import qualified FunGraph.Test.Util
 
 main :: IO ()
 main = do
-  graphData <- readGraphData testDataFileName
+  graphData <- readGraphData FunGraph.Test.Util.testDataFileName
   mutGraph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
   frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
   defaultMain
@@ -22,16 +22,17 @@ main = do
       , bench "Thaw" $ nfAppIO (void . ST.stToIO . FunGraph.thaw) frozenGraph
       , bench "Thaw+freeze" $ nfAppIO (void . ST.stToIO . (FunGraph.freeze <=< FunGraph.thaw)) frozenGraph
       ]
-    , bgroup "Query"
-      [ bgroup "queryPaths" $
-          map (queryPaths mutGraph) FunGraph.Test.allTestCases
-      ]
+    , bgroup "Query" $
+        map (queryPaths mutGraph) FunGraph.Test.allTestCases
     ]
   where
     queryPaths mutGraph test =
-      let (maxCount, _) = FunGraph.Test.queryTest_args test
-      in bench (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $
-        nfAppIO (\g -> ST.stToIO $ FunGraph.runGraphAction g $ FunGraph.Test.queryTest_runQuery test) mutGraph
+      let args@(maxCount, _) = FunGraph.Test.queryTest_args test
+          nameWithMaxCount = FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount
+      in bgroup nameWithMaxCount $ NE.toList $
+        FunGraph.Test.mkQueryFunctions False <&> \(queryFunctionName, queryFunction) ->
+          bench queryFunctionName $
+            nfAppIO (queryFunction args) mutGraph
 
     readGraphData fileName =
       either fail pure =<< FunGraph.fileReadDeclarationMap fileName

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Server.Pages.Root
 ( page
@@ -10,35 +11,40 @@ where
 
 import Lucid
 import Lucid.Htmx
+import Server.HtmlStream
 import qualified Data.Text as T
 import qualified FunGraph
 import qualified Server.Pages.Typeahead
 
-type HandlerType = Html ()
+type HandlerType = HtmlStream IO ()
 
 page
-  :: Html ()
+  :: Monad m
+  => Html ()
   -- ^ Append to 'head' element
   -> Html ()
   -- ^ Initial typeahead suggestions (sequence of 'option' elements)
-  -> (Html (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
+  -> (HtmlStream m (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
   -- ^ Search result HTML and maybe the entered (src, dst).
   --
   --   If the user pastes a "/search?..." link into the browser then we want to display
   --   the root page with the search results included, as well as "src" and "dst" filled in.
-  -> Html ()
+  -> HtmlStream m ()
 page appendToHead initialSuggestions (searchResult, mSrcDst) = do
-  doctype_
-  html_ [lang_ "en"] $ do
+  streamHtml doctype_
+  streamTagBalancedAttr "html" [lang_ "en"]
+  streamHtml $
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-    body_  $ do
+  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
+    let targetId = "search_result"
+    streamHtml $ do
       h1_ "Search for compositions of functions"
-      let targetId = "search_result"
       form targetId initialSuggestions mSrcDst
       h3_ "Results"
-      div_ [id_ targetId] searchResult
+    streamTagBalancedAttrM "div" [id_ targetId]
+      searchResult
 
 form
   :: T.Text -- ^ targetId
@@ -61,7 +67,11 @@ form targetId initialSuggestions mSrcDst = do
       srcInput
       label_ [for_ "dst"] "TO type: "
       dstInput
-      button_ [] "Search"
+      button_ [] $ "Search" <> spinnerSvg -- TODO: Display spinner on the same line as "Search" text
+  where
+    -- Source: https://github.com/n3r4zzurr0/svg-spinners/blob/abfa05c49acf005b8b1e0ef8eb25a67a7057eb20/svg-smil/180-ring.svg
+    spinnerSvg = toHtmlRaw @T.Text
+      "<svg class=\"htmx-indicator\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M12,4a8,8,0,0,1,7.89,6.7A1.53,1.53,0,0,0,21.38,12h0a1.5,1.5,0,0,0,1.48-1.75,11,11,0,0,0-21.72,0A1.5,1.5,0,0,0,2.62,12h0a1.53,1.53,0,0,0,1.49-1.3A8,8,0,0,1,12,4Z\"><animateTransform attributeName=\"transform\" type=\"rotate\" dur=\"0.75s\" values=\"0 12 12;360 12 12\" repeatCount=\"indefinite\"/></path></svg>"
 
 mkTypeaheadInputs
   :: Html ()

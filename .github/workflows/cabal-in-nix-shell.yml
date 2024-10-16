@@ -8,7 +8,8 @@ jobs:
   build_init:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12, macos-11]
+        os: [ubuntu-22.04, ubuntu-20.04, macos-13, macos-12]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -55,23 +56,29 @@ jobs:
       - name: Build 'function-graph-server' library
         run: nix-shell --run "cabal build lib:function-graph-server"
 
-      - name: Build 'function-graph-test' test suite
-        run: nix-shell --run "cabal build test-suite:function-graph-test"
+      - name: Build 'test-unit' test suite
+        run: nix-shell --run "cabal build test-suite:test-unit"
 
-      - name: Run 'function-graph-test' test suite
-        run: nix-shell --run "cabal test test-suite:function-graph-test --test-show-details=direct"
+      - name: Run 'test-unit' test suite
+        run: nix-shell --run "cabal test test-suite:test-unit --test-show-details=direct"
+
+      - name: Build 'test-web' test suite
+        run: nix-shell --run "cabal build exe:test-web"
+
+      - name: Run 'test-web' test suite
+        run: nix-shell --run "cabal run exe:test-web --test-show-details=direct"
 
       - name: Build benchmark-lib
         run: nix-shell --run "cabal build bench:benchmark-lib"
 
       - name: Run benchmark-lib
-        run: nix-shell --run "cabal build bench:benchmark-lib"
+        run: nix-shell --run "cabal run bench:benchmark-lib"
 
       - name: Build benchmark-web
         run: nix-shell --run "cabal build bench:benchmark-web"
 
       - name: Run benchmark-web
-        run: nix-shell --run "cabal build bench:benchmark-web"
+        run: nix-shell --run "cabal run bench:benchmark-web"
 
       - name: Build 'function-graph' executable
         run: nix-shell --run "cabal build exe:function-graph"
