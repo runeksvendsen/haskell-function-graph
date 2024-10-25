@@ -49,6 +49,12 @@ streamHtml
   -> HtmlStream m ()
 streamHtml = HtmlStream . yield
 
+-- | Create a start and end 'Lucid.Html' tag.
+--
+-- Example:
+--
+-- >>> mkStartEndElem "p"
+-- (<p>,</p>)
 mkStartEndElem
   :: T.Text
   -> (Lucid.Html (), Lucid.Html ()) -- ^ (start, end) tags
@@ -77,6 +83,14 @@ streamTagBalancedAttr tag attrs = HtmlStream $
   where
     (start, end) = mkStartEndElem tag
 
+-- | Put a 'HtmlStream' inside a tag.
+--
+-- Example:
+--
+-- >>> import Lucid
+-- >>> let stream = streamTagBalancedM "html" $ streamTagBalancedM "body" $ streamHtml (p_ "hello world")
+-- >>> mconcat $ Data.Functor.Identity.runIdentity $ Streaming.Prelude.toList_ (Server.HtmlStream.toStream stream)
+-- <html><body><p>hello world</p></body></html>
 streamTagBalancedM
   :: Monad m
   => T.Text -- ^ tag
@@ -87,7 +101,7 @@ streamTagBalancedM tag s = HtmlStream $
   where
     (start, end) = mkStartEndElem tag
 
--- | Same as 'streamTagBalanced' but accepts attributes
+-- | Same as 'streamTagBalanced' but accepts tag attributes
 streamTagBalancedAttrM
   :: Monad m
   => T.Text -- ^ tag

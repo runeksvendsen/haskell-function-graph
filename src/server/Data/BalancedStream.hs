@@ -126,7 +126,13 @@ yieldBalanced
 yieldBalanced a1 a2 =
   BalancedStream $ (,[[a2]]) <$> S.yield a1
 
--- | TODO: allows @BEFORE { blah } AFTER@ instead of @BEFORE { blah AFTER }@.
+-- | Insert a 'BalancedStream' between an initial an terminating stream item.
+--
+-- Example:
+--
+-- >>> let stream = yieldBalancedM "START" "END" $ yield "1" >> yield "2" >> yield "3"
+-- >>> concat $ Data.Functor.Identity.runIdentity $ Streaming.Prelude.toList_ (toStream stream)
+-- "START123END"
 yieldBalancedM
   :: Monad m
   => a -- ^ Initial item
