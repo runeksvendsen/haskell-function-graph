@@ -44,15 +44,17 @@ runTests
 runTests runQuery = do
   defaultMain
     [ bgroup "Web server" $
-      [ ("(all results)", id)
-      , ("(first result)", untilFirstResult) -- WIP: verify this actually works
-      ] <&> \(postFix, modifyStream) ->
-        bgroup ("search " ++ postFix)
-          [ bgroup "with graph" $
-              map (benchHttpRequest modifyStream Nothing) allTestCasesNoTimeout
-          , bgroup "without graph" $
-              map (benchHttpRequest modifyStream (Just Server.Api.NoGraph)) allTestCasesNoTimeout
-          ]
+      allTestCasesNoTimeout <&> \testCase ->
+        bgroup (FunGraph.Test.queryTest_name testCase) $
+          [ ("(all results)", id)
+          , ("(first result)", untilFirstResult) -- WIP: verify this actually works
+          ] <&> \(postFix, modifyStream) ->
+            bgroup ("search " ++ postFix)
+              [ bench "with graph" $
+                  benchHttpRequest modifyStream Nothing testCase
+              , bench "without graph" $
+                  benchHttpRequest modifyStream (Just Server.Api.NoGraph) testCase
+              ]
     ]
   where
     -- Currently, the test cases with an empty expected result are tests that are expected to time out.
@@ -64,11 +66,9 @@ runTests runQuery = do
       :: (StreamIOHtml -> StreamIOHtml)
       -> Maybe Server.Api.NoGraph
       -> FunGraph.Test.QueryTest
-      -> Benchmark
+      -> Benchmarkable
     benchHttpRequest modifyStream mNoGraph qt =
-      let maxCount = fst $ FunGraph.Test.queryTest_args qt
-      in bench (FunGraph.Test.queryTest_name qt <> " maxCount=" <> show maxCount) $
-        nfIO $ runQuery modifyStream mNoGraph qt
+      nfIO $ runQuery modifyStream mNoGraph qt
 
     untilFirstResult
       :: StreamIOHtml
