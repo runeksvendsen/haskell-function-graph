@@ -42,20 +42,18 @@ runTests
   :: ((StreamIOHtml -> StreamIOHtml) -> Maybe Server.Api.NoGraph -> FunGraph.Test.QueryTest -> IO BSL.ByteString)
   -> IO ()
 runTests runQuery = do
-  defaultMain
-    [ bgroup "Web server" $
+  defaultMain $
       allTestCasesNoTimeout <&> \testCase ->
         bgroup (FunGraph.Test.queryTest_name testCase) $
-          [ ("(all results)", id)
-          , ("(first result)", untilFirstResult) -- WIP: verify this actually works
-          ] <&> \(postFix, modifyStream) ->
-            bgroup ("search " ++ postFix)
+          [ ("all results", id)
+          , ("first result", untilFirstResult) -- WIP: verify this actually works
+          ] <&> \(name, modifyStream) ->
+            bgroup name
               [ bench "with graph" $
                   benchHttpRequest modifyStream Nothing testCase
-              , bench "without graph" $
+              , bench "no graph" $
                   benchHttpRequest modifyStream (Just Server.Api.NoGraph) testCase
               ]
-    ]
   where
     -- Currently, the test cases with an empty expected result are tests that are expected to time out.
     -- There's no reason to benchmark this.
