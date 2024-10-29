@@ -79,7 +79,7 @@ mkQueryFunction
 mkQueryFunction port = do
   manager <- Network.HTTP.Client.newManager $
     setResponseTimeoutSeconds 60 Network.HTTP.Client.defaultManagerSettings
-  pure $ runHttpRequest manager -- TODO: also 'Just NoGraph'
+  pure $ runHttpRequest manager
   where
     setResponseTimeoutSeconds seconds settings =
       settings{Network.HTTP.Client.managerResponseTimeout = Network.HTTP.Client.responseTimeoutMicro $ seconds * 1e6}

@@ -70,23 +70,25 @@ withSpec searchConfig f =
   Server.withHandlers logger searchConfig mempty testDataFileName $ \handlers ->
     runWarpTestRandomPort (Server.app handlers) $ \port -> do
       queryFun <- mkQueryFunction port
-      let runQuery = fmap parsePPFunctions <$> queryFun id (Just Server.Api.NoGraph)
+      let runQuery noGraph = fmap parsePPFunctions <$> queryFun id noGraph
       main' runQuery >>= f
   where
     logger = const $ pure ()
 
 main'
-  :: (FunGraph.Test.QueryTest -> IO (Either String [FunGraph.Test.PPFunctions]))
+  :: (Maybe Server.Api.NoGraph -> FunGraph.Test.QueryTest -> IO (Either String [FunGraph.Test.PPFunctions]))
   -> IO HSpec.Spec
 main' runQuery = do
   let testCase test =
         let (maxCount, _) = FunGraph.Test.queryTest_args test
         in HSpec.describe (FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount) $ do
-          HSpec.it "contained in top query results" $ do
-            result <- either fail pure =<< runQuery test
-            Set.fromList (map IgnorePackage result)
-              `isSupersetOf`
-                Set.map IgnorePackage (FunGraph.Test.queryTest_expectedResult test)
+          HSpec.describe "contained in top query results" $
+            forM_ [("with graph", Nothing), ("no graph", Just Server.Api.NoGraph)] $ \(name, noGraph) ->
+              HSpec.it name $ do
+                result <- either fail pure =<< runQuery noGraph test
+                Set.fromList (map IgnorePackage result)
+                  `isSupersetOf`
+                    Set.map IgnorePackage (FunGraph.Test.queryTest_expectedResult test)
   pure $ HSpec.describe "Integration tests" $ do
     HSpec.describe "Expected result" $
       forM_ FunGraph.Test.allTestCases testCase
