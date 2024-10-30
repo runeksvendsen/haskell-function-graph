@@ -7,7 +7,7 @@ module FunGraph.Util
   , idxEdgePathTypes
   , showTypeSig
   , graphFromQueryResult
-  , graphToDot
+  , graphToDot, DotGraph, renderDotGraph
   , putStrFlush
   )
   where
@@ -29,6 +29,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Types
 import qualified System.IO
+import qualified Server.GraphViz
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -61,10 +62,12 @@ showTypeSig =
 bsToStr :: BSC8.ByteString -> String
 bsToStr = UTF8.decode . BS.unpack
 
+newtype DotGraph = DotGraph { unDotGraph :: LT.Text }
+
 graphToDot
   :: BSC8.ByteString
   -> DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
-  -> ST s LT.Text
+  -> ST s DotGraph
 graphToDot name =
   let bsToLT = LT.fromStrict . TE.decodeUtf8
       -- use 'lucid' to escape what needs escaping
@@ -107,10 +110,17 @@ graphToDot name =
           , ( "edgetooltip", edgeToolTip)
           ]
 
-  in DG.graphToDotMulti
+  in fmap DotGraph . DG.graphToDotMulti
     vertexAttributes
     (edgeAttributes . DG.eMeta)
     (DG.DotString_DoubleQuoted $ bsToLT name)
+
+renderDotGraph
+  :: DotGraph
+  -> IO (Either String (Lucid.Html ()))
+renderDotGraph dotGraph =
+  -- 'toHtmlRaw' because the output is SVG which contains tags we don't want escaped
+  fmap Lucid.toHtmlRaw <$> Server.GraphViz.renderDotGraph (unDotGraph dotGraph)
 
 -- | Build a graph from the output of 'FunGraph.queryTreeGA'
 graphFromQueryResult

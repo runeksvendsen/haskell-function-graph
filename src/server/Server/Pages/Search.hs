@@ -21,7 +21,6 @@ import qualified FunGraph
 import Data.List (intersperse)
 import Data.Containers.ListUtils (nubOrd)
 import qualified FunGraph.Util as Util
-import qualified Server.GraphViz
 import qualified Control.Monad.ST as ST
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Except (throwError)
@@ -41,6 +40,7 @@ import qualified Data.BalancedStream
 import Control.Monad (when)
 import qualified Data.Time.Clock
 import qualified Control.Monad.ST
+import Data.Either (fromRight)
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -191,10 +191,7 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
           resultGraphE
         pure $ do
           h3_ "Result graph"
-          either
-            (const $ mkErrorText "Failed to render result graph")
-            toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
-            resultGraphE
+          fromRight (mkErrorText "Failed to render result graph") resultGraphE
           openSvgInNewWindowBtn
 
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
@@ -249,7 +246,7 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
           Util.graphFromQueryResult queryResult
             >>= Util.graphToDot ""
       in ST.stToIO resultDotGraph
-        >>= Server.GraphViz.renderDotGraph
+        >>= Util.renderDotGraph
 
     renderResult :: ([FunGraph.TypedFunction], Word) -> Html ()
     renderResult (fns, resultNumber) =
