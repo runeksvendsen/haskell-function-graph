@@ -48,9 +48,11 @@ data SearchEnv = SearchEnv
   , searchEnvVertexLookup :: T.Text -> Maybe FunGraph.FullyQualifiedType
   }
 
--- | TODO
+-- | Search options
 data SearchConfig = SearchConfig
   { searchConfigTimeout :: !Data.Time.Clock.NominalDiffTime
+  -- ^ Cancel a query after it has run for this long.
+  -- Necessary because the worst case running time for a query is huge.
   , searchConfigTrace :: !(Maybe (String -> Control.Monad.ST.ST Control.Monad.ST.RealWorld ()))
   -- ^ Optionally print tracing information for each search query
   }
