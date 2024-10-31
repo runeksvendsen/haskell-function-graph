@@ -8,12 +8,17 @@ all :: [(FullyQualifiedType, String)]
 all =
   [ string
   , strictByteString
+  , strictText
   , lazyText
   ]
 
 strictByteString :: (FullyQualifiedType, String)
 strictByteString =
   (parsePprTyConSingleton "bytestring-0.11.4.0:Data.ByteString.Internal.Type.ByteString", "strict ByteString")
+
+strictText :: (FullyQualifiedType, String)
+strictText =
+  (parsePprTyConSingleton "text-2.0.2:Data.Text.Internal.Text", "strict Text")
 
 lazyText :: (FullyQualifiedType, String)
 lazyText =

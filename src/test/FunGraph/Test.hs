@@ -124,6 +124,8 @@ allTestCases =
   , case4
   , case5
   , case6
+  , case7
+  , case8
   ]
 
 case1 :: QueryTest
@@ -209,6 +211,31 @@ case6 =
       )
     )
   []
+
+case7 :: QueryTest
+case7 =
+  mkTestCase 8
+    (strictByteString, strictText)
+    [ "text-2.0.2:Data.Text.Encoding.decodeASCII"
+    , "text-2.0.2:Data.Text.Encoding.decodeLatin1"
+    , "text-2.0.2:Data.Text.Encoding.decodeUtf16BE"
+    , "text-2.0.2:Data.Text.Encoding.decodeUtf16LE"
+    , "text-2.0.2:Data.Text.Encoding.decodeUtf32BE"
+    , "text-2.0.2:Data.Text.Encoding.decodeUtf32LE"
+    , "text-2.0.2:Data.Text.Encoding.decodeUtf8"
+    , "text-2.0.2:Data.Text.Encoding.decodeUtf8Lenient"
+    ]
+
+case8 :: QueryTest
+case8 =
+  mkTestCase 5
+    (strictText, strictByteString)
+    [ "text-2.0.2:Data.Text.Encoding.encodeUtf16BE"
+    , "text-2.0.2:Data.Text.Encoding.encodeUtf16LE"
+    , "text-2.0.2:Data.Text.Encoding.encodeUtf32BE"
+    , "text-2.0.2:Data.Text.Encoding.encodeUtf32LE"
+    , "text-2.0.2:Data.Text.Encoding.encodeUtf8"
+    ]
 
 newtype PPFunctions = PPFunctions { unPPFunctions :: [FunGraph.Function ()] }
   deriving (Eq, Ord, Generic)
