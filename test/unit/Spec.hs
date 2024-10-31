@@ -20,6 +20,7 @@ import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified Data.List.NonEmpty as NE
 import Data.Functor (void)
+import Test.Hspec.Expectations.Pretty (shouldBe)
 
 main :: IO ()
 main =
@@ -57,7 +58,8 @@ main' shouldTrace queryFunctions graph = do
                   concatMap FunGraph.Test.unPPFunctions $
                   Set.toList $
                   FunGraph.Test.queryTest_expectedResult test
-            graphEdges `isSupersetOf` ppFunctions
+                isSupersetOf' actual expected = Set.intersection actual expected `shouldBe` expected
+            graphEdges `isSupersetOf'` ppFunctions
           HSpec.describe "contained in top query results" $
             forM_ queryFunctions $ \(name, queryFunction) ->
               HSpec.it name $ do
