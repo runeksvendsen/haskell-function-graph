@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module Main
 (main)
 where
@@ -9,12 +11,13 @@ import Data.Functor (void, (<&>))
 import Control.Monad ((<=<))
 import qualified Data.List.NonEmpty as NE
 import qualified FunGraph.Test.Util
+import qualified Server.GraphViz
+import qualified FunGraph.Util
+import qualified Control.Exception as Ex
 
 main :: IO ()
 main = do
-  graphData <- readGraphData FunGraph.Test.Util.testDataFileName
-  mutGraph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
-  frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
+  (graphData, mutGraph, frozenGraph, queryResults) <- setupEnv
   defaultMain
     [ bgroup "Graph"
       [ bench "Create" $ nfAppIO (ST.stToIO . void . FunGraph.buildGraphMut FunGraph.defaultBuildConfig) graphData
@@ -24,8 +27,19 @@ main = do
       ]
     , bgroup "Query" $
         map (queryPaths mutGraph) FunGraph.Test.allTestCases
+    , bgroup "UI"
+        [ bgroup "Dot graph rendering" $
+            map (\(queryResult, name) -> bench name $ nfAppIO createRenderGraph queryResult) queryResults
+        ]
     ]
   where
+    setupEnv = do
+      graphData <- readGraphData FunGraph.Test.Util.testDataFileName
+      mutGraph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
+      frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
+      queryResults <- mapM (runQuery mutGraph) FunGraph.Test.allTestCases
+      pure (graphData, mutGraph, frozenGraph, queryResults)
+
     queryPaths mutGraph test =
       let args@(maxCount, _) = FunGraph.Test.queryTest_args test
           nameWithMaxCount = FunGraph.Test.queryTest_name test <> " maxCount=" <> show maxCount
@@ -39,3 +53,17 @@ main = do
 
     buildGraphFreeze graphData =
       FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData >>= FunGraph.freeze
+
+    runQuery mutGraph test =
+      let (maxCount, srcDst) = FunGraph.Test.queryTest_args test
+          name = FunGraph.Test.queryTest_name test
+      in fmap (,name) $ throwErrorIO $
+        ST.stToIO $ FunGraph.runGraphAction mutGraph $ FunGraph.queryTreeGA maxCount srcDst
+
+    createRenderGraph queryResult = throwErrorIO $
+      ST.stToIO (FunGraph.Util.graphFromQueryResult queryResult)
+      >>= ST.stToIO . FunGraph.Util.graphToDot ""
+      >>= Server.GraphViz.renderDotGraph
+
+    throwErrorIO :: Show a => IO (Either a b) -> IO b
+    throwErrorIO = (either (Ex.throwIO . Ex.ErrorCall . show) return =<<)
