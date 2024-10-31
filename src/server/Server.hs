@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Server
   ( main
@@ -26,6 +27,9 @@ import qualified Control.Monad.ST as ST
 import qualified Data.Graph.Digraph as DG
 import qualified FunGraph.Util
 import Server.HtmlStream (HtmlStream)
+import qualified Data.FileEmbed
+import qualified Data.Text.Encoding
+import qualified Data.Text.Encoding.Error
 
 main :: Server.Pages.Search.SearchConfig -> Html () -> Int -> FilePath -> IO ()
 main searchConfig appendToHead port graphDataFilename =
@@ -95,20 +99,12 @@ mkHandlers searchConfig appendToHead graph = do
       , "}"
       ]
 
-    -- TODO: inline
-    htmx = toHtmlRaw $ T.unlines
-      [ "<script"
-      , "  src=\"https://unpkg.com/htmx.org@1.9.4\""
-      , "  integrity=\"sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV\""
-      , "  crossorigin=\"anonymous\""
-      , "></script>"
+    htmxJsBs = $(Data.FileEmbed.makeRelativeToProject "js/htmx-1.9.4.js" >>= Data.FileEmbed.embedFile)
+    htmxExtBs = $(Data.FileEmbed.makeRelativeToProject "js/htmx-ext-chunked-transfer.js" >>= Data.FileEmbed.embedFile)
 
-      , "<script"
-      , "  src=\"https://unpkg.com/htmx.ext...chunked-transfer/dist/index.js\""
-      , "  integrity=\"sha384-rfvoiWZLab/TZqyI+AMzYNCuqPr24Eyki2rZ4yPm/UkkOgMdiXLAU4nHAz7oi99t\""
-      , "  crossorigin=\"anonymous\""
-      , "></script>"
-      ]
+    htmx =
+      let decodeUtf8 = Data.Text.Encoding.decodeUtf8With Data.Text.Encoding.Error.lenientDecode
+      in script_ (decodeUtf8 htmxJsBs) >> script_ (decodeUtf8 htmxExtBs)
 
 data Handlers = Handlers
   !Server.Pages.Root.HandlerType
