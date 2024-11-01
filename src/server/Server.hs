@@ -67,7 +67,7 @@ mkHandlers
 mkHandlers searchConfig appendToHead graph = do
   (typeaheadHandler, initalSuggestions) <-
     Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) graph
-  let mkRootHandler = Server.Pages.Root.page (htmx <> fixSvgWidth <> appendToHead <> bodyMargin) initalSuggestions
+  let mkRootHandler = Server.Pages.Root.page (fixSvgWidth <> appendToHead <> bodyMargin) htmxScript initalSuggestions
   searchEnv <- Server.Pages.Search.createSearchEnv graph
   pure $ Handlers
         (mkRootHandler (mempty, Nothing))
@@ -102,7 +102,7 @@ mkHandlers searchConfig appendToHead graph = do
     htmxJsBs = $(Data.FileEmbed.makeRelativeToProject "js/htmx-1.9.4.js" >>= Data.FileEmbed.embedFile)
     htmxExtBs = $(Data.FileEmbed.makeRelativeToProject "js/htmx-ext-chunked-transfer.js" >>= Data.FileEmbed.embedFile)
 
-    htmx =
+    htmxScript =
       let decodeUtf8 = Data.Text.Encoding.decodeUtf8With Data.Text.Encoding.Error.lenientDecode
       in script_ (decodeUtf8 htmxJsBs) >> script_ (decodeUtf8 htmxExtBs)
 

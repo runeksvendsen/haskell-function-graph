@@ -23,6 +23,8 @@ page
   => Html ()
   -- ^ Append to 'head' element
   -> Html ()
+  -- ^ Append to 'body' content
+  -> Html ()
   -- ^ Initial typeahead suggestions (sequence of 'option' elements)
   -> (HtmlStream m (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
   -- ^ Search result HTML and maybe the entered (src, dst).
@@ -30,7 +32,7 @@ page
   --   If the user pastes a "/search?..." link into the browser then we want to display
   --   the root page with the search results included, as well as "src" and "dst" filled in.
   -> HtmlStream m ()
-page appendToHead initialSuggestions (searchResult, mSrcDst) = do
+page appendToHead appendToBody initialSuggestions (searchResult, mSrcDst) = do
   streamHtml doctype_
   streamTagBalancedAttr "html" [lang_ "en"]
   streamHtml $
@@ -45,6 +47,7 @@ page appendToHead initialSuggestions (searchResult, mSrcDst) = do
       h3_ "Results"
     streamTagBalancedAttrM "div" [id_ targetId]
       searchResult
+    streamHtml appendToBody
 
 form
   :: T.Text -- ^ targetId
