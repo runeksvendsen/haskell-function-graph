@@ -9,6 +9,7 @@ module FunGraph.Util
   , graphFromQueryResult
   , graphToDot
   , putStrFlush
+  , splitBetween
   )
   where
 
@@ -29,6 +30,8 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Types
 import qualified System.IO
+import Data.Foldable (foldl')
+import Data.Bifunctor (bimap)
 
 -- | Convert sequence of adjacent edges to vertices moved through
 toPathTypes
@@ -127,3 +130,34 @@ graphFromQueryResult res = do
 putStrFlush :: String -> IO ()
 putStrFlush str =
   putStr str >> System.IO.hFlush System.IO.stdout
+
+-- | Split the elements in a list based on whether or not they are between a given start/end element.
+--
+-- Example 1, simple example with an extra "end"-element:
+--
+-- >>> splitBetween (== "START") (== "END") ["hello", "START", "world", "START", "!!", "END", "??", "END", "END", "yay"]
+-- (["START","world","START","!!","END","??","END"],["hello","END","yay"])
+--
+-- Example 2, HTML:
+--
+-- >>> splitBetween (== "<body>") (== "</body>") ["<html>", "<head>", "<script>//hello</script>", "</head>", "<body>", "<p>yay</p>", "</body>", "</html>"]
+-- (["<body>","<p>yay</p>","</body>"],["<html>","<head>","<script>//hello</script>","</head>","</html>"])
+splitBetween
+  :: (a -> Bool) -- ^ "Start"-element
+  -> (a -> Bool) -- ^ "End"-element
+  -> [a] -- ^ Input list
+  -> ([a], [a]) -- ^ fst: elements between (including start/end elements); snd: elements not between
+splitBetween isStart isEnd =
+  bimap reverse reverse . fst . foldl' (flip foldFun) (([], []), 0 :: Integer)
+  where
+    foldFun elem' ((between, notBetween), startElemCount) =
+      let adjustStartElemCount
+            | isStart elem' = (+ 1)
+            | isEnd elem' = subtract 1
+            | otherwise = id
+          newStartElemCount = max 0 $ adjustStartElemCount startElemCount
+          newAccum =
+            if startElemCount > 0 || newStartElemCount > 0
+              then (elem' : between, notBetween)
+              else (between, elem' : notBetween)
+      in (newAccum, newStartElemCount)

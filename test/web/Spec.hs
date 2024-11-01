@@ -32,6 +32,7 @@ import qualified System.IO.Temp
 import qualified System.Environment
 import qualified Test.Hspec.Runner as HSpec
 import Data.Functor (void)
+import qualified FunGraph.Util
 
 main :: IO ()
 main = do
@@ -100,12 +101,24 @@ parsePPFunctions bs = do
   tokenTree <-
       first show
     . Text.HTML.Tree.tokensToForest
+    . snd . FunGraph.Util.splitBetween isUninterestingStartTag isUninterestingEndTag -- Remove uninteresting content. See NOTE below.
     . Text.HTML.Parser.parseTokens
     . Data.Text.Encoding.decodeUtf8With Data.Text.Encoding.Error.lenientDecode
     . Data.ByteString.Lazy.toStrict
     $ bs
   parseTokenTree tokenTree
   where
+    -- NOTE: This is here primarily because the content of a <script> tag caused a parser failure ('ParseTokenForestErrorBracketMismatch') when applying 'Text.HTML.Tree.tokensToForest'. But another advantage is that it should improve speed since we avoid having 'tokensToForest' and 'parseTokenTree' consider irrelevant data.
+    -- TODO: report issue at https://github.com/bgamari/html-parse/issues
+    uninterestingTags = ["script", "head"]
+    isUninterestingStartTag, isUninterestingEndTag :: Text.HTML.Parser.Token -> Bool
+    isUninterestingStartTag = \case
+      Text.HTML.Parser.TagOpen tag _ -> tag `elem` uninterestingTags
+      _ -> False
+    isUninterestingEndTag = \case
+      Text.HTML.Parser.TagClose tag -> tag `elem` uninterestingTags
+      _ -> False
+
     parseTokenTree
       :: [Data.Tree.Tree Text.HTML.Parser.Token]
       -> Either String [FunGraph.Test.PPFunctions]
