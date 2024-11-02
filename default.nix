@@ -1,7 +1,17 @@
-{ nixpkgs ? (import ./nix/pkgs.nix).pkgs
+{ nixpkgsRaw ? (import ./nix/pkgs.nix).pkgs
 , compiler ? "ghc90"
 }:
 let
+  nixpkgs =
+    nixpkgsRaw //
+      { haskellPackages =
+          nixpkgsRaw.haskellPackages.override {
+            overrides = self: super: {
+              statistics = self.haskell.lib.dontCheck super.statistics;
+            };
+          };
+      };
+
   bellman-ford =
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/bellman-ford.git";
