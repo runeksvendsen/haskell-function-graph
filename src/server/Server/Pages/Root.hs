@@ -10,6 +10,7 @@ module Server.Pages.Root
 where
 
 import Lucid
+import Lucid.Base
 import Lucid.Htmx
 import Server.HtmlStream
 import qualified Data.Text as T
@@ -70,11 +71,29 @@ form targetId initialSuggestions mSrcDst = do
       srcInput
       label_ [for_ "dst"] "TO type: "
       dstInput
-      button_ [] $ "Search" <> spinnerSvg -- TODO: Display spinner on the same line as "Search" text
+      searchButton
   where
-    -- Source: https://github.com/n3r4zzurr0/svg-spinners/blob/abfa05c49acf005b8b1e0ef8eb25a67a7057eb20/svg-smil/180-ring.svg
-    spinnerSvg = toHtmlRaw @T.Text
-      "<svg class=\"htmx-indicator\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M12,4a8,8,0,0,1,7.89,6.7A1.53,1.53,0,0,0,21.38,12h0a1.5,1.5,0,0,0,1.48-1.75,11,11,0,0,0-21.72,0A1.5,1.5,0,0,0,2.62,12h0a1.53,1.53,0,0,0,1.49-1.3A8,8,0,0,1,12,4Z\"><animateTransform attributeName=\"transform\" type=\"rotate\" dur=\"0.75s\" values=\"0 12 12;360 12 12\" repeatCount=\"indefinite\"/></path></svg>"
+    searchButton =
+      button_ $
+        div_ [style_ "display: flex; align-items: center;"] $ do -- display "Search"-text and spinner on the same line
+          span_ "Search"
+          with
+            spinnerSvg
+            [ class_ "htmx-indicator" -- display only when a HTMX request is in progress
+            , style_ "margin-left: 8px;" -- add space between "Search"-text and spinner
+            ]
+
+    spinnerSvg =
+      let mkSvg = svg_
+            [ width_ "24"
+            , height_ "24"
+            , makeAttribute "viewBox" "0 0 24 24"
+            , xmlns_ "http://www.w3.org/2000/svg"
+            ]
+      in
+      mkSvg $
+        -- Source: https://github.com/n3r4zzurr0/svg-spinners/blob/abfa05c49acf005b8b1e0ef8eb25a67a7057eb20/svg-smil/180-ring.svg
+        toHtmlRaw @T.Text "<path d=\"M12,4a8,8,0,0,1,7.89,6.7A1.53,1.53,0,0,0,21.38,12h0a1.5,1.5,0,0,0,1.48-1.75,11,11,0,0,0-21.72,0A1.5,1.5,0,0,0,2.62,12h0a1.53,1.53,0,0,0,1.49-1.3A8,8,0,0,1,12,4Z\"><animateTransform attributeName=\"transform\" type=\"rotate\" dur=\"0.75s\" values=\"0 12 12;360 12 12\" repeatCount=\"indefinite\"/></path>"
 
 mkTypeaheadInputs
   :: Html ()
