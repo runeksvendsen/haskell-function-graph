@@ -46,7 +46,7 @@ runTests runQuery = do
       allTestCasesNoTimeout <&> \testCase ->
         bgroup (FunGraph.Test.queryTest_name testCase) $
           [ ("all results", id)
-          , ("first result", untilFirstResult) -- WIP: verify this actually works
+          , ("first result", untilFirstResult)
           ] <&> \(name, modifyStream) ->
             bgroup name
               [ bench "with graph" $
