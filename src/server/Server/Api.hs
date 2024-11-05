@@ -1,7 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -Wno-orphans #-} -- Servant.API.Stream.ToSourceIO for the `streaming` package's `Stream` type
 module Server.Api
   ( Api
   , Root
@@ -12,14 +15,19 @@ module Server.Api
   ) where
 
 import Servant.API
+import Servant.API.Stream
+import Servant.Types.SourceT
+import qualified Streaming as S
+import qualified Streaming.Prelude as S
 import Servant.HTML.Lucid (HTML)
 import Lucid (Html)
 import qualified Data.Text as T
+import Server.HtmlStream (HtmlStream)
 
 type Api = Root :<|> Search :<|> Typeahead
 
 type Root
-  =  Get '[HTML] (Html ())
+  =  StreamGet NoFraming HTML (HtmlStream IO ())
 
 type Search
   =  "search"
@@ -28,7 +36,7 @@ type Search
   :> QueryParam "dst" T.Text
   :> QueryParam "limit" Word
   :> QueryParam "no_graph" NoGraph
-  :> Get '[HTML] (Html ())
+  :> StreamGet NoFraming HTML (HtmlStream IO ())
 
 type Typeahead
   =  "typeahead"
@@ -55,3 +63,27 @@ instance FromHttpApiData NoGraph where
 
 instance ToHttpApiData NoGraph where
   toQueryParam NoGraph = ""
+
+type StreamIO a = S.Stream (S.Of a) IO ()
+
+instance Servant.API.Stream.ToSourceIO a (StreamIO a) where
+  toSourceIO stream =
+    let go s = Effect $
+          S.inspect s >>= \case
+            Left () -> pure Stop
+            Right (a S.:> s') -> pure $ Yield a (go s')
+    in fromStepT $ go stream
+
+instance Servant.API.Stream.FromSourceIO a (StreamIO a) where
+  fromSourceIO (SourceT m) =
+    S.effect $ m (pure . stepToStream)
+    where
+      stepToStream :: StepT IO a -> S.Stream (S.Of a) IO ()
+      stepToStream =
+        let go = \case
+              Stop -> pure ()
+              Error err -> S.lift $ fail err
+              Skip s -> go s
+              Yield x s -> S.yield x >> go s
+              Effect ms -> S.lift ms >>= go
+        in go

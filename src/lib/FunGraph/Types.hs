@@ -13,10 +13,10 @@ module FunGraph.Types
   , functionPackageNoVersion, renderFunctionPackage
   , renderComposedFunctions
   , renderComposedFunctionsStr
-  , parseComposedFunctions
+  , parseComposedFunctions, parseComposedFunctionsNoPackage
   , renderFunction, renderFunctionNoPackage, functionToHackageDocsUrl
   , typedFunctionFromToTypes
-  , parseIdentifier, parseFunction
+  , parseIdentifier, parseFunction, parseFunctionNoPackage
   , fqtPackage
   , fullyQualifiedTypeToText
   , declarationMapJsonToFunctions
@@ -87,18 +87,41 @@ renderComposedFunctionsStr =
 
 -- | Parse the output of 'renderComposedFunctions'
 parseComposedFunctions :: T.Text -> Either String (NE.NonEmpty UntypedFunction)
-parseComposedFunctions txt = do
+parseComposedFunctions =
+  parseComposedFunctionsGeneric parseFunction
+
+-- | Same as 'renderComposedFunctions' but doesn't include package/version prefix.
+--   See also 'parseFunctionNoPackage'.
+--
+-- Example:
+--
+-- >>> :set -XOverloadedStrings
+-- >>> parseComposedFunctionsNoPackage "Data.ByteString.Char8.fromStrict . Data.Text.Encoding.encodeUtf16BE"
+-- Right (Function {_function_name = "encodeUtf16BE", _function_module = "Data.Text.Encoding", _function_package = FgPackage {fgPackageName = "", fgPackageVersion = ""}, _function_typeSig = ()} :| [Function {_function_name = "fromStrict", _function_module = "Data.ByteString.Char8", _function_package = FgPackage {fgPackageName = "", fgPackageVersion = ""}, _function_typeSig = ()}])
+parseComposedFunctionsNoPackage :: T.Text -> Either String (NE.NonEmpty UntypedFunction)
+parseComposedFunctionsNoPackage =
+  parseComposedFunctionsGeneric parseFunctionNoPackage
+
+-- | Parse composed functions.
+parseComposedFunctionsGeneric
+  :: (T.Text -> Either String UntypedFunction)
+  -> T.Text
+  -> Either String (NE.NonEmpty UntypedFunction)
+parseComposedFunctionsGeneric parse txt = do
   functionList <- maybe (Left "parseComposedFunctions: zero functions") Right $ NE.nonEmpty $ reverse $ T.splitOn " . " txt
-  let parsedMaybeFunctions = NE.map parseFunction functionList
+  let parsedMaybeFunctions = NE.map parse functionList
   sequence parsedMaybeFunctions
 
-
 -- | Produce e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
+--
+-- The inverse of 'parseFunction'.
 renderFunction :: Function typeSig -> T.Text
 renderFunction fn =
   Types.renderFgPackage (_function_package fn) <> ":" <> renderFunctionNoPackage fn
 
--- | Produce e.g. "Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'
+-- | Produce e.g. "Data.Text.Encoding.encodeUtf16BE" from an untyped 'Function'.
+--
+-- The inverse of 'parseFunctionNoPackage'.
 renderFunctionNoPackage :: Function typeSig -> T.Text
 renderFunctionNoPackage fn =
   _function_module fn <> "." <> _function_name fn
@@ -147,10 +170,28 @@ typedFunctionFromToTypes fn =
     sig = _function_typeSig fn
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'
+--
+-- The inverse of 'renderFunction'.
 parseFunction :: T.Text -> Either String UntypedFunction
 parseFunction bs = do
   (name, moduleName, pkg) <- parseIdentifier bs
   pure $ Function name moduleName pkg ()
+
+-- | Parse e.g. "Data.Text.Encoding.encodeUtf16BE" to an untyped 'Function'.
+--
+-- The inverse of 'renderFunctionNoPackage'.
+--
+--  NOTE: Returns a 'FunGraph.Types.Function' with '_function_package' set to @Types.FgPackage "" ""@
+--
+-- Example:
+--
+-- >>> :set -XOverloadedStrings
+-- >>> parseFunctionNoPackage "Data.Text.Encoding.encodeUtf16BE"
+-- Right (Function {_function_name = "encodeUtf16BE", _function_module = "Data.Text.Encoding", _function_package = FgPackage {fgPackageName = "", fgPackageVersion = ""}, _function_typeSig = ()})
+parseFunctionNoPackage :: T.Text -> Either String UntypedFunction
+parseFunctionNoPackage bs = do
+  untypedFunction <- parseFunction $ "blah-1:" <> bs
+  pure untypedFunction{_function_package = Types.FgPackage "" ""}
 
 -- | Parse e.g. "text-2.0.2:Data.Text.Encoding.encodeUtf16BE" to an untyped identifier.
 --

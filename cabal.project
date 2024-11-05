@@ -8,12 +8,13 @@ test-show-details: direct
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/dump-decls.git
-    tag: 4cd666adb25a557421d71a6f9547f3e214adf2cd
+    tag: 496fc63c1279aedcdf7143c5ea85970e63a2ba0a
+    subdir: dump-decls-lib
 
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/bellman-ford.git
-    tag: 7106198d5a0f9b9d58ba8a0050de47f6c1517a80
+    tag: ef7c86f36b13d109f58b70946e023fa83502dec8
 
 source-repository-package
     type: git
@@ -25,3 +26,5 @@ source-repository-package
     type: git
     location: https://github.com/epicallan/servant-errors.git
     tag: 7c564dff3574c35cae721b711bd90503b851438e
+
+index-state: hackage.haskell.org 2024-07-12T21:46:06Z

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Server.Pages.Root
 ( page
@@ -9,36 +10,45 @@ module Server.Pages.Root
 where
 
 import Lucid
+import Lucid.Base
 import Lucid.Htmx
+import Server.HtmlStream
 import qualified Data.Text as T
 import qualified FunGraph
 import qualified Server.Pages.Typeahead
 
-type HandlerType = Html ()
+type HandlerType = HtmlStream IO ()
 
 page
-  :: Html ()
+  :: Monad m
+  => Html ()
   -- ^ Append to 'head' element
   -> Html ()
+  -- ^ Append to 'body' content
+  -> Html ()
   -- ^ Initial typeahead suggestions (sequence of 'option' elements)
-  -> (Html (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
+  -> (HtmlStream m (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
   -- ^ Search result HTML and maybe the entered (src, dst).
   --
   --   If the user pastes a "/search?..." link into the browser then we want to display
   --   the root page with the search results included, as well as "src" and "dst" filled in.
-  -> Html ()
-page appendToHead initialSuggestions (searchResult, mSrcDst) = do
-  doctype_
-  html_ [lang_ "en"] $ do
+  -> HtmlStream m ()
+page appendToHead appendToBody initialSuggestions (searchResult, mSrcDst) = do
+  streamHtml doctype_
+  streamTagBalancedAttr "html" [lang_ "en"]
+  streamHtml $
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-    body_  $ do
+  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
+    let targetId = "search_result"
+    streamHtml $ do
       h1_ "Search for compositions of functions"
-      let targetId = "search_result"
       form targetId initialSuggestions mSrcDst
       h3_ "Results"
-      div_ [id_ targetId] searchResult
+    streamTagBalancedAttrM "div" [id_ targetId]
+      searchResult
+    streamHtml appendToBody
 
 form
   :: T.Text -- ^ targetId
@@ -61,7 +71,29 @@ form targetId initialSuggestions mSrcDst = do
       srcInput
       label_ [for_ "dst"] "TO type: "
       dstInput
-      button_ [] "Search"
+      searchButton
+  where
+    searchButton =
+      button_ $
+        div_ [style_ "display: flex; align-items: center;"] $ do -- display "Search"-text and spinner on the same line
+          span_ "Search"
+          with
+            spinnerSvg
+            [ class_ "htmx-indicator" -- display only when a HTMX request is in progress
+            , style_ "margin-left: 8px;" -- add space between "Search"-text and spinner
+            ]
+
+    spinnerSvg =
+      let mkSvg = svg_
+            [ width_ "24"
+            , height_ "24"
+            , makeAttribute "viewBox" "0 0 24 24"
+            , xmlns_ "http://www.w3.org/2000/svg"
+            ]
+      in
+      mkSvg $
+        -- Source: https://github.com/n3r4zzurr0/svg-spinners/blob/abfa05c49acf005b8b1e0ef8eb25a67a7057eb20/svg-smil/180-ring.svg
+        toHtmlRaw @T.Text "<path d=\"M12,4a8,8,0,0,1,7.89,6.7A1.53,1.53,0,0,0,21.38,12h0a1.5,1.5,0,0,0,1.48-1.75,11,11,0,0,0-21.72,0A1.5,1.5,0,0,0,2.62,12h0a1.53,1.53,0,0,0,1.49-1.3A8,8,0,0,1,12,4Z\"><animateTransform attributeName=\"transform\" type=\"rotate\" dur=\"0.75s\" values=\"0 12 12;360 12 12\" repeatCount=\"indefinite\"/></path>"
 
 mkTypeaheadInputs
   :: Html ()

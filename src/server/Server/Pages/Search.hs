@@ -1,16 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Server.Pages.Search
 ( page
 , handler, HandlerType
 , SearchEnv, createSearchEnv
+, SearchConfig(..), defaultSearchConfig
+  -- * Testing/benchmarking
+, mkResultAttribute
 )
 where
 
 import Lucid
-import Control.Monad (forM_)
 import qualified Data.Text as T
 import Servant.Server
 import qualified FunGraph
@@ -21,7 +25,7 @@ import qualified Server.GraphViz
 import qualified Control.Monad.ST as ST
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Except (throwError)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Text.Lazy as LT
@@ -30,11 +34,33 @@ import Server.Api (HxBoosted, NoGraph (NoGraph))
 import Data.String (fromString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Bifunctor (bimap)
+import qualified Control.Monad.Except as ET
+import Server.HtmlStream
+import qualified Streaming.Prelude as S
+import qualified Data.BalancedStream
+import Control.Monad (when)
+import qualified Data.Time.Clock
+import qualified Control.Monad.ST
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
-  { searchEnvGraph :: FunGraph.Graph ST.RealWorld
+  { searchEnvGraph :: !(FunGraph.Graph ST.RealWorld)
   , searchEnvVertexLookup :: T.Text -> Maybe FunGraph.FullyQualifiedType
+  }
+
+-- | Search options
+data SearchConfig = SearchConfig
+  { searchConfigTimeout :: !Data.Time.Clock.NominalDiffTime
+  -- ^ Cancel a query after it has run for this long.
+  -- Necessary because the worst case running time for a query is huge.
+  , searchConfigTrace :: !(Maybe (String -> Control.Monad.ST.ST Control.Monad.ST.RealWorld ()))
+  -- ^ Optionally print tracing information for each search query
+  }
+
+defaultSearchConfig :: SearchConfig
+defaultSearchConfig = SearchConfig
+  { searchConfigTimeout = 0.1
+  , searchConfigTrace = Nothing
   }
 
 createSearchEnv
@@ -58,64 +84,90 @@ type HandlerType ret
   -> Handler ret
 
 handler
-  :: SearchEnv
-  -> HandlerType (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-handler searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
+  :: SearchConfig
+  -> SearchEnv
+  -> HandlerType (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
+handler cfg searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
   let defaultLimit = 100 -- TODO: add as HTML input field
   in do
-    page searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
-handler _ _ _ _ _ _ =
+    page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
+handler _ _ _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
 
+type StreamElem = ([FunGraph.NonEmpty FunGraph.TypedFunction], Double)
+
 page
-  :: SearchEnv
+  :: SearchConfig
+  -> SearchEnv
   -> T.Text
   -> T.Text
   -> Word
   -> Maybe NoGraph
-  -> Handler (Html (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
+  -> Handler (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
+page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
-  eQueryResults <- liftIO $ ST.stToIO $ query (src, dst)
-  (queryResult, queryResultPaths) <- either
+  eQueryResultStream <- liftIO $ query' (src, dst)
+  queryResultStream <- either
     (internalError . mkMissingVertexError (src, dst))
     pure
-    eQueryResults
-  let resultHtml' =
-        table_ $ do
-          thead_ $
-            tr_ $ do
-              td_ "Function composition"
-              td_ "Dependencies"
-          tbody_ $
-            forM_ (map fst queryResultPaths) $ \result ->
-              tr_ $ do
-                td_ $ renderResult result
-                td_ $
-                  mconcat $
-                    intersperse ", " $
-                      map mkPackageLink (nubOrd $ map FunGraph._function_package result)
-  let resultHtml = if null queryResultPaths then noResultsText (src, dst) else resultHtml'
-  htmlGraph <- case mNoGraph of
-    Just NoGraph -> pure mempty
-    Nothing -> do
-      resultGraphE <- liftIO $ renderResultGraphIO queryResult
-      either
-        (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
-        (const $ pure ())
-        resultGraphE
-      pure $ do
-        h3_ "Result graph"
-        either
-          (const $ mkErrorText "Failed to render result graph")
-          toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
-          resultGraphE
-        openSvgInNewWindowBtn
-  pure (resultHtml <> htmlGraph, (src, dst))
+    eQueryResultStream
+  let queryResultStreamWithAccum
+        :: S.Stream (S.Of StreamElem) IO (Bool, [StreamElem]) -- Return value: (timedOut, streamed elements)
+      queryResultStreamWithAccum =
+        Data.BalancedStream.appendStreamAccum
+          (\mTimeout accum -> pure (Data.Maybe.isNothing mTimeout, accum))
+          queryResultStream
+  let queryResultPaths = S.map fst $
+        FunGraph.queryResultTreeToPathsStream queryResultStreamWithAccum
+  let resultsTable :: HtmlStream IO (Bool, [StreamElem])
+      resultsTable = do
+        let mkTable
+              :: Monad m
+              => HtmlStream m a
+              -> HtmlStream m a
+            mkTable rows =
+              streamTagBalancedM "table" $ do
+                streamTagBalancedM "tbody" $ do
+                  streamHtml $ thead_ $
+                    tr_ $ do
+                      td_ "Function composition"
+                      td_ "Dependencies"
+                  rows
+            mkTableRow :: ([FunGraph.TypedFunction], Word) -> Html ()
+            mkTableRow (result, resultNumber) =
+                tr_ $ do
+                  td_ $ renderResult (result, resultNumber)
+                  td_ $
+                    mconcat $
+                      intersperse ", " $
+                        map mkPackageLink (nubOrd $ map FunGraph._function_package result)
+            queryResultPathsWithResultNumber =
+              S.zip queryResultPaths (S.enumFrom 1)
+            renderTableWithRows
+              :: Bool -- Denotes whether this the first result
+              -> S.Stream (S.Of ([FunGraph.TypedFunction], Word)) IO a
+              -> HtmlStream IO a
+            renderTableWithRows isFirstResult s = do
+              ET.lift (S.next s) >>= \case
+                Left r -> return r
+                Right (result, s') -> do
+                  let tableRow = streamHtml (mkTableRow result) >> renderTableWithRows False s'
+                  if isFirstResult then mkTable tableRow else tableRow
+        renderTableWithRows True queryResultPathsWithResultNumber
+      resultGraph accum =
+        if null accum then mempty else ET.lift (mkGraph accum) >>= streamHtml
+  pure $ (, (src, dst)) $ do
+    (timedOut, accum) <- resultsTable
+    when timedOut $
+      streamHtml timedOutText
+    when (null accum) $
+      streamHtml $ noResultsText (src, dst)
+    resultGraph accum
   where
-    mkErrorText = p_ [style_ "color:red"]
+    maxCount = fromIntegral maxCount'
 
+    mkErrorText = p_ [style_ "color:red"]
     internalError errText =
       throwError $ err500 { errBody = "Internal error: " <> errText }
 
@@ -127,6 +179,26 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
       , "Please report bug at https://github.com/runeksvendsen/haskell-function-graph/issues."
       ]
 
+    mkGraph
+      :: ET.MonadIO m
+      => [StreamElem]
+      -> m (Html ())
+    mkGraph queryResult = case mNoGraph of
+      Just NoGraph -> pure mempty
+      Nothing -> do
+        resultGraphE <- liftIO $ renderResultGraphIO queryResult
+        either
+          (\err -> liftIO $ putStrLn $ "ERROR: Failed to render result graph: " <> err)
+          (const $ pure ())
+          resultGraphE
+        pure $ do
+          h3_ "Result graph"
+          either
+            (const $ mkErrorText "Failed to render result graph")
+            toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+            resultGraphE
+          openSvgInNewWindowBtn
+
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
     noResultsText (src, dst) =
       mkErrorText $ mconcat
@@ -135,6 +207,13 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
         , " to "
         , mono $ toHtml $ FunGraph.renderFullyQualifiedType dst
         , "."
+        ]
+
+    timedOutText :: Html ()
+    timedOutText =
+      mkErrorText $ mconcat
+        [ "Query timed out! Query did not terminate within the time limit of "
+        , toHtml $ show timeout
         ]
 
     mkPackageLink fnPkg =
@@ -150,11 +229,21 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
         pure
         (lookupVertex txt)
 
-    query srcDst =
-      FunGraph.runGraphAction graph $
-        FunGraph.queryTreeAndPathsGA
-          (fromIntegral maxCount)
-          srcDst
+    queryTreeTimeoutIO =
+      maybe
+        FunGraph.queryTreeTimeoutIO
+        FunGraph.queryTreeTimeoutIOTrace
+        (searchConfigTrace cfg)
+
+    query' srcDst =
+      ET.runExceptT $
+          queryTreeTimeoutIO
+            graph
+            timeout
+            maxCount
+            srcDst
+
+    timeout = searchConfigTimeout cfg
 
     renderResultGraphIO queryResult =
       let
@@ -164,8 +253,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
       in ST.stToIO resultDotGraph
         >>= Server.GraphViz.renderDotGraph
 
-    renderResult :: [FunGraph.TypedFunction] -> Html ()
-    renderResult fns =
+    renderResult :: ([FunGraph.TypedFunction], Word) -> Html ()
+    renderResult (fns, resultNumber) =
       let renderSingleFn fn =
             let (fromTy, toTy) = FunGraph.typedFunctionFromToTypes fn
                 typeSig = T.unwords
@@ -180,7 +269,8 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
                   [href_ $ FunGraph.functionToHackageDocsUrl fn, target_ "_blank"]
                   (mono $ toHtml $ FunGraph.renderFunctionNoPackage fn)
             in functionNameWithLink `with` [title_ typeSig]
-      in mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
+      in div_ [mkResultAttribute (T.pack $ show resultNumber)] $
+          mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
 
     mono =
       let style = style_ $ T.intercalate "; " $
@@ -188,6 +278,10 @@ page (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount mNoGraph = do
             , "background-color: rgb(200, 200, 200)"
             ]
       in span_ [style]
+
+-- | Exported for benchmarking purposes: marks the actual results in the HTML so we can benchmark e.g. "time to first result"
+mkResultAttribute :: T.Text -> Attribute
+mkResultAttribute = data_ "result-number"
 
 openSvgInNewWindowBtn :: Html ()
 openSvgInNewWindowBtn = do
