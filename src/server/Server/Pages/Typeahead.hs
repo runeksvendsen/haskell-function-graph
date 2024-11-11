@@ -110,6 +110,6 @@ suggestionOption_ :: [Attribute] -> FunGraph.FullyQualifiedType -> Html ()
 suggestionOption_ extraAttrs fqt =
   option_
     ([ value_ $ FunGraph.renderFullyQualifiedType fqt
-    , label_ $ FunGraph.renderFullyQualifiedType fqt
+    , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
     ] ++ extraAttrs)
     ""

@@ -12,10 +12,10 @@ where
 import Lucid
 import Lucid.Base
 import Lucid.Htmx
-import Server.HtmlStream
 import qualified Data.Text as T
 import qualified FunGraph
 import qualified Server.Pages.Typeahead
+import Server.HtmlStream
 
 type HandlerType = HtmlStream IO ()
 
@@ -80,7 +80,10 @@ form targetId initialSuggestions mSrcDst = do
           with
             spinnerSvg
             [ class_ "htmx-indicator" -- display only when a HTMX request is in progress
-            , style_ "margin-left: 8px;" -- add space between "Search"-text and spinner
+            , style_ $ T.intercalate ";"
+                [ "margin-left: 8px" -- add space between "Search"-text and spinner
+                , "opacity: 0" -- hide initially when JS is disabled
+                ]
             ]
 
     spinnerSvg =
@@ -102,33 +105,39 @@ mkTypeaheadInputs
 mkTypeaheadInputs initialSuggestions mSrcDst = do
   script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
   pure
-    ( mkInput "src" [] (fst <$> mSrcDst)
-    , mkInput "dst" [] (snd <$> mSrcDst)
+    ( mkInput initialSuggestions "src" attrs (fst <$> mSrcDst)
+    , mkInput initialSuggestions "dst" attrs (snd <$> mSrcDst)
     )
   where
-    mkInput id' attrs mInitialValue = do
-      let inputId = id' <> "_" <> "input"
-      mkSuggestions id' mInitialValue initialSuggestions
-      input_ $ attrs ++
-        [ name_ inputId
-        , id_ inputId
-        , type_ "search"
-        , placeholder_ "enter an unqualified type name, e.g. Text, and select the qualified name above"
-        , list_ id'
-        , hxGet_ "/typeahead" -- TODO: use something type-safe
-        , hxTarget_ $ "#" <> id'
-        , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms"
-        , hxPushUrl_ "false"
-        ]
+    attrs =
+      [ placeholder_ "enter an unqualified type name, e.g. Text, and select the qualified name above"
+      ]
 
-mkSuggestions
-  :: T.Text -- ^ id
-  -> Maybe FunGraph.FullyQualifiedType -- ^ initial value
+mkInput
+  :: Html ()
+  -> T.Text
+  -> [Attribute]
+  -> Maybe FunGraph.FullyQualifiedType
   -> Html ()
-  -> Html ()
-mkSuggestions id' mFqt suggestions =
-  select_
-    [ id_ id'
-    , name_ id'
-    , required_ ""
-    ] $ maybe mempty (Server.Pages.Typeahead.suggestionOption_ [selected_ ""]) mFqt <> suggestions
+mkInput initialSuggestions id' attrs mInitialValue = do
+  suggestions
+  input_ $ attrs ++
+    [ name_ id'
+    , id_ id'
+    , type_ "search"
+    , list_ suggestionsId
+    , hxGet_ "/typeahead" -- get suggestions from here (TODO: use something type-safe)
+    , hxTarget_ $ "#" <> suggestionsId -- put suggestions here
+    , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms" -- TODO: FACTOR OUT
+    , hxPushUrl_ "false"
+    , autocomplete_ "off"
+    , spellcheck_ "off"
+    ]
+  where
+    suggestionsId = "list_" <> id'
+
+    suggestions =
+      datalist_
+        [ id_ suggestionsId
+        , name_ suggestionsId
+        ] $ maybe mempty (Server.Pages.Typeahead.suggestionOption_ [selected_ ""]) mInitialValue <> initialSuggestions
