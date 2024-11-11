@@ -193,11 +193,13 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
           resultGraphE
         pure $ do
           h3_ "Result graph"
+          let addSvgElemId = T.replace "<svg " ("<svg id=\"" <> svgGraphId <> "\" ") -- hacky way to add an "id" attribute to the SVG graph
+              svgGraphId = "graph"
           either
             (const $ mkErrorText "Failed to render result graph")
-            toHtmlRaw -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
+            (toHtmlRaw . addSvgElemId) -- 'toHtmlRaw' because 'resultGraph' contains tags we don't want escaped
             resultGraphE
-          openSvgInNewWindowBtn
+          openSvgInNewWindowBtn svgGraphId
 
     noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
     noResultsText (src, dst) =
@@ -283,8 +285,8 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
 mkResultAttribute :: T.Text -> Attribute
 mkResultAttribute = data_ "result-number"
 
-openSvgInNewWindowBtn :: Html ()
-openSvgInNewWindowBtn = do
+openSvgInNewWindowBtn :: T.Text -> Html ()
+openSvgInNewWindowBtn svgGraphId = do
   button_
     [ id_ btnId
     , style_ "visibility:hidden; display:none;" -- Hide the button if JS is disabled
@@ -299,7 +301,7 @@ openSvgInNewWindowBtn = do
     , " btnElem.style.visibility = \"visible\";"
     , " // open SVG in new window on click"
     , " btnElem.onclick = (evt) => {"
-    , "  const svg = document.querySelector(\"svg\");"
+    , "  const svg = document.getElementById(\"" <> svgGraphId <> "\");"
     , "  const as_text = new XMLSerializer().serializeToString(svg);"
     , "  const blob = new Blob([as_text], { type: \"image/svg+xml\" });"
     , "  const url = URL.createObjectURL(blob);"
