@@ -225,6 +225,7 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         ]
         (mono $ toHtml $ FunGraph.fgPackageName fnPkg)
 
+    -- TODO: don't throw 404; display HTML message and populate suggestions
     lookupVertexM txt =
       maybe
         (throwError $ err404 { errBody = "Type not found: " <> TLE.encodeUtf8 (LT.fromStrict txt) })
