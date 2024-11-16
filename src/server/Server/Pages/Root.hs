@@ -103,23 +103,28 @@ mkTypeaheadInputs
   -> Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -- ^ Initial values for (src, dst)
   -> Html (Html (), Html ())
 mkTypeaheadInputs initialSuggestions mSrcDst = do
-  script_ "function checkUserKeydown(event) { return event instanceof KeyboardEvent }"
+  script_ $ "function " <> jsTriggerFunctionName <> "(event) { return event instanceof KeyboardEvent }"
   pure
-    ( mkInput initialSuggestions "src" attrs (fst <$> mSrcDst)
-    , mkInput initialSuggestions "dst" attrs (snd <$> mSrcDst)
+    ( mkInput' "src" (fst <$> mSrcDst)
+    , mkInput' "dst" (snd <$> mSrcDst)
     )
   where
+    mkInput' = mkInput jsTriggerFunctionName attrs initialSuggestions
+
     attrs =
       [ placeholder_ "enter an unqualified type name, e.g. Text, and select the qualified name above"
       ]
 
+    jsTriggerFunctionName = "checkUserKeydown"
+
 mkInput
-  :: Html ()
-  -> T.Text
-  -> [Attribute]
+  :: T.Text -- ^ Name of JS trigger function
+  -> [Attribute] -- ^ Attributes
+  -> Html () -- ^ Initial suggestions
+  -> T.Text -- ^ input ID
   -> Maybe FunGraph.FullyQualifiedType
   -> Html ()
-mkInput initialSuggestions id' attrs mInitialValue = do
+mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
   suggestions
   input_ $ attrs ++
     [ name_ id'
@@ -128,7 +133,7 @@ mkInput initialSuggestions id' attrs mInitialValue = do
     , list_ suggestionsId
     , hxGet_ "/typeahead" -- get suggestions from here (TODO: use something type-safe)
     , hxTarget_ $ "#" <> suggestionsId -- put suggestions here
-    , hxTrigger_ "keyup[checkUserKeydown.call(this, event)] changed delay:25ms" -- TODO: FACTOR OUT
+    , hxTrigger_ $ "keyup[" <> jsTriggerFunctionName <> ".call(this, event)] changed delay:25ms"
     , hxPushUrl_ "false"
     , autocomplete_ "off"
     , spellcheck_ "off"
