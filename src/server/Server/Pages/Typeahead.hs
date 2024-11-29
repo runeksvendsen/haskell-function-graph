@@ -2,6 +2,7 @@
 module Server.Pages.Typeahead
 ( mkHandler, HandlerType
 , suggestionOption_
+, renderSearchValue
 )
 where
 
@@ -109,7 +110,11 @@ suggestions prioTrie prefix = do
 suggestionOption_ :: [Attribute] -> FunGraph.FullyQualifiedType -> Html ()
 suggestionOption_ extraAttrs fqt =
   option_
-    ([ value_ $ FunGraph.renderFullyQualifiedType fqt
+    ([ value_ $ renderSearchValue fqt
     , label_ $ FunGraph.renderFullyQualifiedTypeNoPackage fqt
     ] ++ extraAttrs)
     ""
+
+-- ^ Render a value that goes into the src/dst search input
+renderSearchValue :: FunGraph.FullyQualifiedType -> T.Text
+renderSearchValue = FunGraph.renderFullyQualifiedType

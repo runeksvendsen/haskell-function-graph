@@ -122,7 +122,7 @@ mkInput
   -> [Attribute] -- ^ Attributes
   -> Html () -- ^ Initial suggestions
   -> T.Text -- ^ input ID
-  -> Maybe FunGraph.FullyQualifiedType
+  -> Maybe FunGraph.FullyQualifiedType -- ^ initial value (optional)
   -> Html ()
 mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
   suggestions
@@ -130,6 +130,7 @@ mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
     [ name_ id'
     , id_ id'
     , type_ "search"
+    , value_ $ maybe mempty Server.Pages.Typeahead.renderSearchValue mInitialValue
     , list_ suggestionsId
     , hxGet_ "/typeahead" -- get suggestions from here (TODO: use something type-safe)
     , hxTarget_ $ "#" <> suggestionsId -- put suggestions here
@@ -145,4 +146,4 @@ mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
       datalist_
         [ id_ suggestionsId
         , name_ suggestionsId
-        ] $ maybe mempty (Server.Pages.Typeahead.suggestionOption_ [selected_ ""]) mInitialValue <> initialSuggestions
+        ] initialSuggestions
