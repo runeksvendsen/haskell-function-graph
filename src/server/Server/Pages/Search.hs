@@ -5,8 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Server.Pages.Search
-( page
-, handler, HandlerType
+( handler, HandlerType
 , SearchEnv, createSearchEnv
 , SearchConfig(..), defaultSearchConfig
   -- * Testing/benchmarking
