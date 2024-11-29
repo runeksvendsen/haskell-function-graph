@@ -138,6 +138,8 @@ mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
     , hxPushUrl_ "false"
     , autocomplete_ "off"
     , spellcheck_ "off"
+    , required_ ""
+    , autofocus_
     ]
   where
     suggestionsId = "list_" <> id'
