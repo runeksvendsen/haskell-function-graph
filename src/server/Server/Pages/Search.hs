@@ -40,7 +40,6 @@ import qualified Data.BalancedStream
 import Control.Monad (when)
 import qualified Data.Time.Clock
 import qualified Control.Monad.ST
-import qualified Data.List.NonEmpty as NE
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -81,24 +80,18 @@ type HandlerType ret
   -> Maybe T.Text -- ^ dst
   -> Maybe Word -- ^ max number of results
   -> Maybe NoGraph -- ^ if 'Just' then don't draw a graph
-  -> ET.ExceptT (NE.NonEmpty ValidationError) Handler ret
-
-data ValidationError
-  = ValidationError_NoSuchVertex T.Text
-  | ValidationError_MissingSrcVertex
-  | ValidationError_MissingDstVertex
+  -> Handler ret
 
 handler
   :: SearchConfig
   -> SearchEnv
   -> HandlerType (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-handler cfg searchEnv _ mSrc mDst mMaxCount mNoGraph =
-  case (mSrc, mDst) of
-
+handler cfg searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
+  let defaultLimit = 100 -- TODO: add as HTML input field
+  in do
     page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
+handler _ _ _ _ _ _ _ =
   throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
-  where
-    defaultLimit = 100 -- TODO: add as HTML input field
 
 type StreamElem = ([FunGraph.NonEmpty FunGraph.TypedFunction], Double)
 
@@ -109,13 +102,13 @@ page
   -> T.Text
   -> Word
   -> Maybe NoGraph
-  -> ET.ExceptT (NE.NonEmpty ValidationError) Handler (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
+  -> Handler (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
 page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
   src <- lookupVertexM srcTxt
   dst <- lookupVertexM dstTxt
   eQueryResultStream <- liftIO $ query' (src, dst)
   queryResultStream <- either
-    (ET.lift . internalError . mkMissingVertexError (src, dst))
+    (internalError . mkMissingVertexError (src, dst))
     pure
     eQueryResultStream
   let queryResultStreamWithAccum
@@ -234,7 +227,7 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
     -- TODO: don't throw 404; display HTML message and populate suggestions
     lookupVertexM txt =
       maybe
-        (throwError $ ValidationError_NoSuchVertex txt)
+        (throwError $ err404 { errBody = "Type not found: " <> TLE.encodeUtf8 (LT.fromStrict txt) })
         pure
         (lookupVertex txt)
 
