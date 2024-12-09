@@ -76,6 +76,7 @@ library function-graph-server
                     , streaming
                     , time
                     , file-embed
+                    , these
     hs-source-dirs:   src/server
     default-language: Haskell2010
 

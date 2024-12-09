@@ -68,20 +68,20 @@ mkHandlers searchConfig appendToHead graph = do
   (typeaheadHandler, initalSuggestions) <-
     Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) graph
   let mkRootHandler = Server.Pages.Root.page (fixSvgWidth <> appendToHead <> bodyMargin) htmxScript initalSuggestions
-  searchEnv <- Server.Pages.Search.createSearchEnv graph
+  searchEnv <- Server.Pages.Search.createSearchEnv mkRootHandler graph
   pure $ Handlers
-        (mkRootHandler (mempty, Nothing))
-        (\mHxBoosted mSrc mDst mMaxCount mNoGraph -> do
-            let runSearchHandler = Server.Pages.Search.handler searchConfig searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph
-            case mHxBoosted of
-              Just HxBoosted -> do
-                (searchResult, _) <- runSearchHandler
-                pure searchResult
-              Nothing -> do
-                (searchResult, (src, dst)) <- runSearchHandler
-                pure $ mkRootHandler (searchResult, Just (src, dst))
+        (mkRootHandler (mempty, (Nothing, Nothing))) -- root handler
+        (\mHxBoosted mSrc mDst mMaxCount mNoGraph -> do -- search handler
+            Server.Pages.Search.handler
+              searchConfig
+              searchEnv
+              mHxBoosted
+              mSrc
+              mDst
+              mMaxCount
+              mNoGraph
         )
-        typeaheadHandler
+        typeaheadHandler -- typeahead handler
   where
     typeaheadCountLimit = 25
 
