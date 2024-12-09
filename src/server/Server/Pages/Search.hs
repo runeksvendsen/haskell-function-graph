@@ -2,12 +2,20 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 
 module Server.Pages.Search
 ( handler, HandlerType
 , SearchEnv, createSearchEnv
 , SearchConfig(..), defaultSearchConfig
+  -- * Validation
+, VertexInputField -- TODO: how to export kind only?
+, InputFieldValidationError(..)
+, ValidationError
+, renderHandlerError
   -- * Testing/benchmarking
 , mkResultAttribute
 )
@@ -27,9 +35,7 @@ import Control.Monad.Except (throwError)
 import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Graph.Digraph as DG
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Encoding as TLE
-import Server.Api (HxBoosted, NoGraph (NoGraph))
+import Server.Api (HxBoosted (HxBoosted), NoGraph (NoGraph))
 import Data.String (fromString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Bifunctor (bimap)
@@ -37,14 +43,19 @@ import qualified Control.Monad.Except as ET
 import Server.HtmlStream
 import qualified Streaming.Prelude as S
 import qualified Data.BalancedStream
-import Control.Monad (when)
+import Control.Monad (when, forM)
 import qualified Data.Time.Clock
 import qualified Control.Monad.ST
+import Data.These (These (..))
+import Data.Functor ((<&>))
+import qualified Server.Pages.Typeahead
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
   { searchEnvGraph :: !(FunGraph.Graph ST.RealWorld)
   , searchEnvVertexLookup :: T.Text -> Maybe FunGraph.FullyQualifiedType
+  , searchEnvRootHandler :: (HtmlStream IO (), (Maybe T.Text, Maybe T.Text)) -> HtmlStream IO ()
+    -- ^ Needed in case the 'HX-Boosted' header is not present, in which case a full page is returned
   }
 
 -- | Search options
@@ -63,14 +74,16 @@ defaultSearchConfig = SearchConfig
   }
 
 createSearchEnv
-  :: FunGraph.Graph ST.RealWorld
+  :: ((HtmlStream IO (), (Maybe T.Text, Maybe T.Text)) -> HtmlStream IO ())
+  -> FunGraph.Graph ST.RealWorld
   -> IO SearchEnv
-createSearchEnv graph = do
+createSearchEnv mkRootHandler graph = do
   vertices <- ST.stToIO $ DG.vertexLabels graph
   let hm = HM.fromList $ map (\fqt -> (FunGraph.renderFullyQualifiedType fqt, fqt)) vertices
   pure $ SearchEnv
     { searchEnvGraph = graph
     , searchEnvVertexLookup = (`HM.lookup` hm)
+    , searchEnvRootHandler = mkRootHandler
     }
 
 -- ^ /Search/ handler type
@@ -82,33 +95,102 @@ type HandlerType ret
   -> Maybe NoGraph -- ^ if 'Just' then don't draw a graph
   -> Handler ret
 
+type ValidationError =
+  (These (InputFieldValidationError 'Src) (InputFieldValidationError 'Dst))
+
+type HandlerResult = Either ValidationError (HtmlStream IO ())
+
+renderHandlerError
+  :: These (InputFieldValidationError 'Src) (InputFieldValidationError 'Dst)
+  -> Html ()
+renderHandlerError = \case
+  This err -> renderError "source" err
+  That err -> renderError "target" err
+  These errSrc errTgt -> do
+    renderError "source" errSrc
+    renderError "target" errTgt
+  where
+    renderError :: T.Text -> InputFieldValidationError inputField -> Html ()
+    renderError inputName = \case
+      InputFieldValidationError_MissingVertex ->
+        mkErrorText . toHtml $ "Missing " <> inputName <> " vertex"
+      InputFieldValidationError_NoSuchVertex input ->
+        mkErrorText $
+          mconcat $ intersperse (toHtml (" " :: T.Text))
+            [ toHtml $ "No such " <> inputName <> " vertex"
+            , mkMonoText (toHtml input) <> "."
+            , "Perhaps you meant one of: TODO"
+            ]
+
+-- | Full handler (considers 'HX-Boosted' header)
 handler
   :: SearchConfig
   -> SearchEnv
-  -> HandlerType (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-handler cfg searchEnv _ (Just src) (Just dst) mMaxCount mNoGraph =
-  let defaultLimit = 100 -- TODO: add as HTML input field
-  in do
-    page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
-handler _ _ _ _ _ _ _ =
-  throwError $ err400 { errBody = "Missing 'src' and/or 'dst' query param" }
+  -> HandlerType (HtmlStream IO ())
+     -- ^ (html, (src, dst))
+handler cfg searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph = do
+  eResult <- handler' cfg searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph
+  let searchResultHtml = case eResult of -- either the actual result or a human-readable error
+        Right (searchResultStream, (src, dst)) ->
+          searchResultStream
+        Left err ->
+          Server.HtmlStream.streamHtml $ Server.Pages.Search.renderHandlerError err
+  -- pure $ eResult <&> \(_, (src, dst)) ->
+  pure $ case mHxBoosted of
+    Just HxBoosted ->
+      searchResultHtml
+    Nothing -> do
+      searchEnvRootHandler searchEnv (searchResultHtml, (mSrc, mDst))
+
+-- | Pure Search handler (doesn't consider 'HX-Boosted' header)
+handler'
+  :: SearchConfig
+  -> SearchEnv
+  -> HandlerType (Either ValidationError (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)))
+     -- ^ (html, (src, dst))
+handler' cfg searchEnv _ mSrc mDst mMaxCount mNoGraph =
+  forM validatedVertices $ \(src, dst) -> do
+    html <- page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
+    pure (html, (src, dst))
+  where
+    defaultLimit = 100 -- TODO: add as HTML input field
+
+    validatedVertices
+      :: Either
+          (These (InputFieldValidationError 'Src) (InputFieldValidationError 'Dst))
+            (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
+    validatedVertices =
+      case (validateVertex mSrc, validateVertex mDst) of
+        (Right src, Right dst) -> Right (src, dst)
+        (Left err, Right _) -> Left $ This err
+        (Right _, Left err) -> Left $ That err
+        (Left err1, Left err2) -> Left $ These err1 err2
+
+    validateVertex
+      :: Maybe T.Text
+      -> Either (InputFieldValidationError inputField) FunGraph.FullyQualifiedType
+    validateVertex Nothing = Left InputFieldValidationError_MissingVertex
+    validateVertex (Just txt) =
+      let lookupVertex = searchEnvVertexLookup searchEnv
+      in maybe
+        (Left $ InputFieldValidationError_NoSuchVertex txt)
+        Right
+        (lookupVertex txt)
 
 type StreamElem = ([FunGraph.NonEmpty FunGraph.TypedFunction], Double)
 
 page
   :: SearchConfig
   -> SearchEnv
-  -> T.Text
-  -> T.Text
+  -> FunGraph.FullyQualifiedType
+  -> FunGraph.FullyQualifiedType
   -> Word
   -> Maybe NoGraph
-  -> Handler (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)) -- ^ (html, (src, dst))
-page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
-  src <- lookupVertexM srcTxt
-  dst <- lookupVertexM dstTxt
+  -> Handler (HtmlStream IO ())
+page cfg searchEnv src dst maxCount' mNoGraph = do
   eQueryResultStream <- liftIO $ query' (src, dst)
   queryResultStream <- either
-    (internalError . mkMissingVertexError (src, dst))
+    (internalError . missingVertexError)
     pure
     eQueryResultStream
   let queryResultStreamWithAccum
@@ -156,21 +238,20 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         renderTableWithRows True queryResultPathsWithResultNumber
       resultGraph accum =
         if null accum then mempty else ET.lift (mkGraph accum) >>= streamHtml
-  pure $ (, (src, dst)) $ do
+  pure $ do
     (timedOut, accum) <- resultsTable
     when timedOut $
       streamHtml timedOutText
     when (null accum) $
-      streamHtml $ noResultsText (src, dst)
+      streamHtml noResultsText
     resultGraph accum
   where
     maxCount = fromIntegral maxCount'
 
-    mkErrorText = p_ [style_ "color:red"]
     internalError errText =
       throwError $ err500 { errBody = "Internal error: " <> errText }
 
-    mkMissingVertexError (src, dst) (FunGraph.GraphActionError_NoSuchVertex v) = BSL.unwords
+    missingVertexError (FunGraph.GraphActionError_NoSuchVertex v) = BSL.unwords
       [ "Query returned 'no such vertex' error for vertex:"
       , fromString $ show v
       , "but we have the vertices right here:"
@@ -200,13 +281,12 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
             resultGraphE
           openSvgInNewWindowBtn svgGraphId
 
-    noResultsText :: (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -> Html ()
-    noResultsText (src, dst) =
+    noResultsText =
       mkErrorText $ mconcat
         [ "No results found. No path from "
-        , mono $ toHtml $ FunGraph.renderFullyQualifiedType src
+        , mkMonoText $ toHtml $ FunGraph.renderFullyQualifiedType src
         , " to "
-        , mono $ toHtml $ FunGraph.renderFullyQualifiedType dst
+        , mkMonoText $ toHtml $ FunGraph.renderFullyQualifiedType dst
         , "."
         ]
 
@@ -222,14 +302,7 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
         [ href_ $ "https://hackage.haskell.org/package/" <> FunGraph.renderFgPackage fnPkg
         , target_ "_blank"
         ]
-        (mono $ toHtml $ FunGraph.fgPackageName fnPkg)
-
-    -- TODO: don't throw 404; display HTML message and populate suggestions
-    lookupVertexM txt =
-      maybe
-        (throwError $ err404 { errBody = "Type not found: " <> TLE.encodeUtf8 (LT.fromStrict txt) })
-        pure
-        (lookupVertex txt)
+        (mkMonoText $ toHtml $ FunGraph.fgPackageName fnPkg)
 
     queryTreeTimeoutIO =
       maybe
@@ -240,7 +313,7 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
     query' srcDst =
       ET.runExceptT $
           queryTreeTimeoutIO
-            graph
+            (searchEnvGraph searchEnv)
             timeout
             maxCount
             srcDst
@@ -269,17 +342,21 @@ page cfg (SearchEnv graph lookupVertex) srcTxt dstTxt maxCount' mNoGraph = do
                 functionNameWithLink :: Html ()
                 functionNameWithLink = a_
                   [href_ $ FunGraph.functionToHackageDocsUrl fn, target_ "_blank"]
-                  (mono $ toHtml $ FunGraph.renderFunctionNoPackage fn)
+                  (mkMonoText $ toHtml $ FunGraph.renderFunctionNoPackage fn)
             in functionNameWithLink `with` [title_ typeSig]
       in div_ [mkResultAttribute (T.pack $ show resultNumber)] $
-          mconcat $ intersperse (mono " . ") $ map renderSingleFn (reverse fns)
+          mconcat $ intersperse (mkMonoText " . ") $ map renderSingleFn (reverse fns)
 
-    mono =
-      let style = style_ $ T.intercalate "; " $
-            [ "font-family: monospace, monospace"
-            , "background-color: rgb(200, 200, 200)"
-            ]
-      in span_ [style]
+mkErrorText :: Html () -> Html ()
+mkErrorText = p_ [style_ "color:red"]
+
+mkMonoText :: Html () -> Html ()
+mkMonoText =
+  let style = style_ $ T.intercalate "; "
+        [ "font-family: monospace, monospace"
+        , "background-color: rgb(200, 200, 200)"
+        ]
+  in span_ [style]
 
 -- | Exported for benchmarking purposes: marks the actual results in the HTML so we can benchmark e.g. "time to first result"
 mkResultAttribute :: T.Text -> Attribute
@@ -312,3 +389,11 @@ openSvgInNewWindowBtn svgGraphId = do
     ]
   where
     btnId = "open_svg_in_new_window"
+
+data VertexInputField
+  = Src
+  | Dst
+
+data InputFieldValidationError (inputField :: VertexInputField)
+  = InputFieldValidationError_MissingVertex
+  | InputFieldValidationError_NoSuchVertex T.Text
