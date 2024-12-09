@@ -47,8 +47,6 @@ import Control.Monad (when, forM)
 import qualified Data.Time.Clock
 import qualified Control.Monad.ST
 import Data.These (These (..))
-import Data.Functor ((<&>))
-import qualified Server.Pages.Typeahead
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -98,8 +96,6 @@ type HandlerType ret
 type ValidationError =
   (These (InputFieldValidationError 'Src) (InputFieldValidationError 'Dst))
 
-type HandlerResult = Either ValidationError (HtmlStream IO ())
-
 renderHandlerError
   :: These (InputFieldValidationError 'Src) (InputFieldValidationError 'Dst)
   -> Html ()
@@ -127,11 +123,10 @@ handler
   :: SearchConfig
   -> SearchEnv
   -> HandlerType (HtmlStream IO ())
-     -- ^ (html, (src, dst))
 handler cfg searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph = do
   eResult <- handler' cfg searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph
   let searchResultHtml = case eResult of -- either the actual result or a human-readable error
-        Right (searchResultStream, (src, dst)) ->
+        Right searchResultStream ->
           searchResultStream
         Left err ->
           Server.HtmlStream.streamHtml $ Server.Pages.Search.renderHandlerError err
@@ -146,12 +141,10 @@ handler cfg searchEnv mHxBoosted mSrc mDst mMaxCount mNoGraph = do
 handler'
   :: SearchConfig
   -> SearchEnv
-  -> HandlerType (Either ValidationError (HtmlStream IO (), (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)))
-     -- ^ (html, (src, dst))
+  -> HandlerType (Either ValidationError (HtmlStream IO ()))
 handler' cfg searchEnv _ mSrc mDst mMaxCount mNoGraph =
   forM validatedVertices $ \(src, dst) -> do
-    html <- page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
-    pure (html, (src, dst))
+    page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
   where
     defaultLimit = 100 -- TODO: add as HTML input field
 
