@@ -33,15 +33,20 @@ type HandlerType
   -> Maybe T.Text
   -> Handler (Html ())
 
+-- | Used to look up suggestions for the "no such vertex"-error
+type LookupFunction
+  = T.Text -> Maybe (NE.NonEmpty FunGraph.FullyQualifiedType)
+
 mkHandler
   :: Maybe Word -- ^ Limit the number of typeahead suggestions. NB: Must be greater than zero if present.
   -> FunGraph.Graph ST.RealWorld
-  -> IO ( HandlerType, Html ()) -- ^ (handler, initial suggestions)
+  -> IO (HandlerType, LookupFunction, Html ()) -- ^ (handler, initial suggestions)
 mkHandler mLimit graph = do
   mPrioTrie <- mkPrioTrie mLimit graph
   prioTrie <- maybe (fail "empty input graph in Typeahead handler") pure mPrioTrie
   let initialSuggestions = suggestions prioTrie ""
-  pure (handler prioTrie, initialSuggestions)
+      lookupFunction prefix = fmap snd <$> Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
+  pure (handler prioTrie, lookupFunction, initialSuggestions)
 
 -- | For each vertex (type), count the number of different packages that export a function which operates on this vertex (type).
 calculatePriorities
