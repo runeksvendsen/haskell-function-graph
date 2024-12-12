@@ -30,6 +30,8 @@ import Server.HtmlStream (HtmlStream)
 import qualified Data.FileEmbed
 import qualified Data.Text.Encoding
 import qualified Data.Text.Encoding.Error
+import qualified Data.List.NonEmpty as NE
+import Control.Monad (unless)
 
 main :: Server.Pages.Search.SearchConfig -> Html () -> Int -> FilePath -> IO ()
 main searchConfig appendToHead port graphDataFilename =
@@ -65,10 +67,13 @@ mkHandlers
   -> FunGraph.Graph ST.RealWorld
   -> IO Handlers
 mkHandlers searchConfig appendToHead graph = do
-  (typeaheadHandler, initalSuggestions) <-
+  unless (Server.Pages.Search.searchConfigSuggestionLimit searchConfig >= 1) $
+    fail "'searchConfigSuggestionLimit' must be greater than or equal to 1."
+  (typeaheadHandler, lookupFunction, initalSuggestions) <-
     Server.Pages.Typeahead.mkHandler (Just typeaheadCountLimit) graph
   let mkRootHandler = Server.Pages.Root.page (fixSvgWidth <> appendToHead <> bodyMargin) htmxScript initalSuggestions
-  searchEnv <- Server.Pages.Search.createSearchEnv mkRootHandler graph
+      lookupFunctionLimited = fmap (NE.fromList . NE.take (fromIntegral $ Server.Pages.Search.searchConfigSuggestionLimit searchConfig)) . lookupFunction
+  searchEnv <- Server.Pages.Search.createSearchEnv mkRootHandler graph lookupFunctionLimited
   pure $ Handlers
         (mkRootHandler (mempty, (Nothing, Nothing))) -- root handler
         (\mHxBoosted mSrc mDst mMaxCount mNoGraph -> do -- search handler
