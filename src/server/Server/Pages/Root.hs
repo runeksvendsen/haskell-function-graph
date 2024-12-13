@@ -40,31 +40,32 @@ page appendToHead appendToBody initialSuggestions (searchResult, mSrcDst) = do
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
-    let targetId = "search_result"
-    streamHtml $ do
-      h1_ "Search for compositions of functions"
-      form targetId initialSuggestions mSrcDst
-      h3_ "Results"
-    streamTagBalancedAttrM "div" [id_ targetId]
-      searchResult
-    streamHtml appendToBody
+  let searchResultId = "search_result"
+  streamTagBalancedAttrM "body"
+    [ hxExt_ "chunked-transfer" -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
+    , hxBoost_ "true"
+    , hxTarget_ ("#" <> searchResultId)
+    , hxPushUrl_ "true"
+    ] $ do
+      streamHtml $ do
+        h1_ "Search for compositions of functions"
+        form initialSuggestions mSrcDst
+        h3_ "Results"
+      streamTagBalancedAttrM "div" [id_ searchResultId]
+        searchResult
+      streamHtml appendToBody
 
 form
-  :: T.Text -- ^ targetId
-  -> Html ()  -- ^ Initial suggestions
+  :: Html ()  -- ^ Initial suggestions
   -> (Maybe T.Text, Maybe T.Text) -- ^ Initial values for (src, dst)
   -> Html ()
-form targetId initialSuggestions mSrcDst = do
+form initialSuggestions mSrcDst = do
   h2_ "Search"
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
   form_
     [ action_ "/search"
     , method_ "get"
     , role_ "search"
-    , hxBoost_ "true"
-    , hxTarget_ ("#" <> targetId)
-    , hxPushUrl_ "true"
     ] $ do
       (srcInput, dstInput) <- mkTypeaheadInputs initialSuggestions mSrcDst
       label_ [for_ "src"] "FROM type: "
