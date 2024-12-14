@@ -8,6 +8,7 @@ let
           nixpkgsRaw.haskellPackages.override {
             overrides = self: super: {
               statistics = self.haskell.lib.dontCheck super.statistics;
+              flatparse = self.haskell.lib.dontCheck super.flatparse;
             };
           };
       };
