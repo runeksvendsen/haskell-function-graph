@@ -13,9 +13,8 @@ import Lucid
 import Lucid.Base
 import Lucid.Htmx
 import qualified Data.Text as T
-import qualified FunGraph
-import qualified Server.Pages.Typeahead
 import Server.HtmlStream
+import Data.Maybe (fromMaybe)
 
 type HandlerType = HtmlStream IO ()
 
@@ -27,8 +26,9 @@ page
   -- ^ Append to 'body' content
   -> Html ()
   -- ^ Initial typeahead suggestions (sequence of 'option' elements)
-  -> (HtmlStream m (), Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType))
-  -- ^ Search result HTML and maybe the entered (src, dst).
+  -> (HtmlStream m (), (Maybe T.Text, Maybe T.Text))
+  -- ^ 1. Search result HTML
+  --   2. Maybe the entered (src, dst). NOTE: 'T.Text' instead of 'FunGraph.FullyQualifiedType' because we want to support filling the input fields with arbitrary text (not just valid types).
   --
   --   If the user pastes a "/search?..." link into the browser then we want to display
   --   the root page with the search results included, as well as "src" and "dst" filled in.
@@ -40,31 +40,32 @@ page appendToHead appendToBody initialSuggestions (searchResult, mSrcDst) = do
     head_ $ do
       title_ "Haskell Function Graph"
       appendToHead
-  streamTagBalancedAttrM "body" [hxExt_ "chunked-transfer"] $ do -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
-    let targetId = "search_result"
-    streamHtml $ do
-      h1_ "Search for compositions of functions"
-      form targetId initialSuggestions mSrcDst
-      h3_ "Results"
-    streamTagBalancedAttrM "div" [id_ targetId]
-      searchResult
-    streamHtml appendToBody
+  let searchResultId = "search_result"
+  streamTagBalancedAttrM "body"
+    [ hxExt_ "chunked-transfer" -- Necessary because HTMX breaks "chunked" Transfer-Encoding. See https://github.com/bigskysoftware/htmx/issues/1911
+    , hxBoost_ "true"
+    , hxTarget_ ("#" <> searchResultId)
+    , hxPushUrl_ "true"
+    ] $ do
+      streamHtml $ do
+        h1_ "Search for compositions of functions"
+        form initialSuggestions mSrcDst
+        h3_ "Results"
+      streamTagBalancedAttrM "div" [id_ searchResultId]
+        searchResult
+      streamHtml appendToBody
 
 form
-  :: T.Text -- ^ targetId
-  -> Html ()  -- ^ Initial suggestions
-  -> Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -- ^ Initial values for (src, dst)
+  :: Html ()  -- ^ Initial suggestions
+  -> (Maybe T.Text, Maybe T.Text) -- ^ Initial values for (src, dst)
   -> Html ()
-form targetId initialSuggestions mSrcDst = do
+form initialSuggestions mSrcDst = do
   h2_ "Search"
   p_ "Find compositions of functions that take the FROM type as input and returns a value of the TO type."
   form_
     [ action_ "/search"
     , method_ "get"
     , role_ "search"
-    , hxBoost_ "true"
-    , hxTarget_ ("#" <> targetId)
-    , hxPushUrl_ "true"
     ] $ do
       (srcInput, dstInput) <- mkTypeaheadInputs initialSuggestions mSrcDst
       label_ [for_ "src"] "FROM type: "
@@ -100,13 +101,13 @@ form targetId initialSuggestions mSrcDst = do
 
 mkTypeaheadInputs
   :: Html ()
-  -> Maybe (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType) -- ^ Initial values for (src, dst)
+  -> (Maybe T.Text, Maybe T.Text) -- ^ Initial values for (src, dst)
   -> Html (Html (), Html ())
-mkTypeaheadInputs initialSuggestions mSrcDst = do
+mkTypeaheadInputs initialSuggestions (mSrc, mDst) = do
   script_ $ "function " <> jsTriggerFunctionName <> "(event) { return event instanceof KeyboardEvent }"
   pure
-    ( mkInput' "src" (fst <$> mSrcDst)
-    , mkInput' "dst" (snd <$> mSrcDst)
+    ( mkInput' "src" mSrc
+    , mkInput' "dst" mDst
     )
   where
     mkInput' = mkInput jsTriggerFunctionName attrs initialSuggestions
@@ -122,7 +123,7 @@ mkInput
   -> [Attribute] -- ^ Attributes
   -> Html () -- ^ Initial suggestions
   -> T.Text -- ^ input ID
-  -> Maybe FunGraph.FullyQualifiedType -- ^ initial value (optional)
+  -> Maybe T.Text -- ^ initial value (optional)
   -> Html ()
 mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
   suggestions
@@ -130,7 +131,7 @@ mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
     [ name_ id'
     , id_ id'
     , type_ "search"
-    , value_ $ maybe mempty Server.Pages.Typeahead.renderSearchValue mInitialValue
+    , value_ $ fromMaybe mempty mInitialValue
     , list_ suggestionsId
     , hxGet_ "/typeahead" -- get suggestions from here (TODO: use something type-safe)
     , hxTarget_ $ "#" <> suggestionsId -- put suggestions here

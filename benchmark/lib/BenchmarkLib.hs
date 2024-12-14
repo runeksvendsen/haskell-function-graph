@@ -15,12 +15,16 @@ import qualified Server.GraphViz
 import qualified FunGraph.Util
 import qualified Control.Exception as Ex
 
+dataFileName :: FilePath
+dataFileName = FunGraph.Test.Util.testDataFileName
+
 main :: IO ()
 main = do
   (graphData, mutGraph, frozenGraph, queryResults) <- setupEnv
   defaultMain
     [ bgroup "Graph"
       [ bench "Create" $ nfAppIO (ST.stToIO . void . FunGraph.buildGraphMut FunGraph.defaultBuildConfig) graphData
+      , bench "Read graph data list" $ nfIO (FunGraph.fileReadDeclarationMap dataFileName)
       , bench "Freeze" $ nfAppIO (ST.stToIO . FunGraph.freeze) mutGraph
       , bench "Thaw" $ nfAppIO (void . ST.stToIO . FunGraph.thaw) frozenGraph
       , bench "Thaw+freeze" $ nfAppIO (void . ST.stToIO . (FunGraph.freeze <=< FunGraph.thaw)) frozenGraph
@@ -34,7 +38,7 @@ main = do
     ]
   where
     setupEnv = do
-      graphData <- readGraphData FunGraph.Test.Util.testDataFileName
+      graphData <- readGraphData dataFileName
       mutGraph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
       frozenGraph <- ST.stToIO $ buildGraphFreeze graphData
       queryResults <- mapM (runQuery mutGraph) FunGraph.Test.allTestCases
