@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
@@ -6,13 +5,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 -- TODO: document
 module Data.PrioTrie
-( PrioTrie(..)
+( PrioTrie
 , prefixLookup
-, fromList)
+, fromList
+, fromListDeriveKey
+)
 where
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Internal as BSI
 import qualified Data.List.NonEmpty as NE
 import qualified Data.IntMap.Strict as IMap
 import qualified Data.Map.Strict as Map
@@ -34,50 +34,21 @@ data PrioTrie prio a
 
 instance (NFData prio, NFData a) => NFData (PrioTrie prio a)
 
--- TODO: move to unit test
-unitTest :: (PrioTrie Integer String, PrioTrie Integer String)
-unitTest =
-  (fromList id inputList, trie)
-  where
-    inputList = NE.fromList
-      [ ("a", (2, "2"))
-      , ("aa", (3, "3"))
-      , ("ab", (1, "1"))
-      , ("c", (4, "4"))
-      ]
+-- | Construct a 'PrioTrie' from a list of items and their priorities, deriving each 'BS.ByteString' key from the item
+fromListDeriveKey
+  :: forall prio a.
+     Ord prio
+  => (NE.NonEmpty (prio, a) -> NE.NonEmpty (prio, a))
+     -- ^ Modify the sorted list stored at each 'PrioTrie_Node'.
+     -- Used to e.g. limit the number of items in the list.
+  -> (a -> BS.ByteString)
+     -- ^ Derive a 'BS.ByteString' from the item (@a@) stored in the 'PrioTrie'
+  -> NE.NonEmpty (prio, a)
+  -> PrioTrie prio a
+fromListDeriveKey modify deriveKey lst =
+  fromList modify $ NE.map (\prioAndA -> (deriveKey $ snd prioAndA, prioAndA)) lst
 
-    trie =
-      PrioTrie_Node
-        (IMap.fromList
-          [ ( w 'a'
-            , PrioTrie_Node
-                (IMap.fromList
-                  [ ( w 'a'
-                    , PrioTrie_Node
-                        IMap.empty
-                        (NE.fromList [(3, "3")])
-                    )
-                  , ( w 'b'
-                    , PrioTrie_Node
-                        IMap.empty
-                        (NE.fromList [(1, "1")])
-                    )
-                  ]
-                )
-                (NE.fromList [(3, "3"), (2, "2"), (1, "1")])
-            )
-          , ( w 'c'
-            , PrioTrie_Node
-                IMap.empty
-                (NE.fromList [(4, "4")])
-            )
-          ]
-        )
-        (NE.fromList $ sortOn (Down . fst) $ map snd (NE.toList inputList))
-
-    w :: Char -> Int
-    w = fromIntegral . BSI.c2w
-
+-- | Construct a 'PrioTrie' from a list of items and their priorities with the given 'BS.ByteString' as key.
 fromList
   :: forall prio a.
      Ord prio
