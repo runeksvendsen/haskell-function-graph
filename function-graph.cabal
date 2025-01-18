@@ -215,3 +215,20 @@ executable test-web
     , ansi-terminal
     , temporary
   default-language: Haskell2010
+
+test-suite test-prop
+  import: warnings
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Spec.PrioTrie
+  hs-source-dirs:
+      test/prop
+  build-depends:
+      base >=4.7 && <5
+    , function-graph:function-graph-server
+    , bytestring
+    , QuickCheck
+    , tasty
+    , tasty-quickcheck
+  default-language: Haskell2010
