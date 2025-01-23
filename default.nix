@@ -3,11 +3,13 @@
 }:
 let
   nixpkgs =
-    nixpkgsRaw //
-      { haskellPackages =
-          nixpkgsRaw.haskellPackages.override {
+    nixpkgsRaw.pkgs.lib.recursiveUpdate # See https://nix.dev/guides/best-practices.html#updating-nested-attribute-sets
+      nixpkgsRaw
+      { pkgs.haskell.packages.${compiler} = # NOTE: Previously, 'haskellPackages' was overridden. But this is not correct, since 'haskellPackages' simply points to 'pkgs.haskell.packages.${compiler}' with some nixpkgs-specified default value for '${compiler}'.
+          nixpkgsRaw.pkgs.haskell.packages.${compiler}.override {
             overrides = self: super: {
-              statistics = self.haskell.lib.dontCheck super.statistics;
+              statistics = nixpkgsRaw.pkgs.haskell.lib.dontCheck super.statistics;
+              flatparse = nixpkgsRaw.pkgs.haskell.lib.dontCheck super.flatparse;
             };
           };
       };
