@@ -8,7 +8,7 @@ module Data.PrioTrie
 ( PrioTrie
 , prefixLookup
 , fromList
-, fromListDeriveKey
+, fromListDeriveKey, toListDeriveKey
 )
 where
 
@@ -29,7 +29,9 @@ data PrioTrie prio a
       !(IMap.IntMap (PrioTrie prio a))
       -- ^ Children
       !(NE.NonEmpty (prio, a))
-      -- ^ List containing /all/ items that match the prefix reached through the 'IntMap'
+      -- ^ List containing /all/ items that match the prefix reached through the 'IntMap'.
+      --
+      --   In other words: no need to traverse the entire tree to get all items for a given prefix.
       deriving (Eq, Show, Generic, Generic1)
 
 instance (NFData prio, NFData a) => NFData (PrioTrie prio a)
@@ -104,6 +106,16 @@ fromList modify lst =
         NE.fromList . sortOn (Down . fst) $ map snd (NE.toList lst)
 
   in PrioTrie_Node intMap nonEmpty
+
+-- | Convert a 'PrioTrie' to a list of keys and items (along with priority)
+--   given the @deriveKey@ function used to construct the 'PrioTrie' using 'fromListDeriveKey'
+toListDeriveKey
+  :: (a -> BS.ByteString)
+     -- ^ Derive a 'BS.ByteString' from the item (@a@) stored in the 'PrioTrie'
+  -> PrioTrie prio a
+  -> NE.NonEmpty (BS.ByteString, (prio, a))
+toListDeriveKey deriveKey (PrioTrie_Node _ neList) =
+  NE.map (\prioAndA -> (deriveKey $ snd prioAndA, prioAndA)) neList
 
 prefixLookup
   :: PrioTrie prio a

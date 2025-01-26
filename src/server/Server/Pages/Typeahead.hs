@@ -3,6 +3,9 @@ module Server.Pages.Typeahead
 ( mkHandler, HandlerType
 , suggestionOption_
 , renderSearchValue
+  -- * For testing
+, mkPrioTrie
+, deriveKey
 )
 where
 
@@ -18,7 +21,6 @@ import qualified Data.Map.Strict as Map
 import Data.Tuple (swap)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.ByteString as BS
-import Data.Functor ((<&>))
 import Control.Monad.Except (throwError)
 import qualified Data.Text.Encoding as TE
 import qualified Control.Exception as Ex
@@ -72,19 +74,20 @@ mkPrioTrie mLimit graph = do
   priorityList <- stToIO $ do
     priorityMap <- calculatePriorities graph
     mapM (traverse (lookupVertexId graph) . swap) (Map.toList priorityMap)
-  let mTypeaheadData :: Maybe (NE.NonEmpty (BS.ByteString, (Word, FunGraph.FullyQualifiedType)))
-      mTypeaheadData = NE.nonEmpty $ priorityList <&> \(count, fqt) ->
-        (TE.encodeUtf8 $ FunGraph.renderFullyQualifiedTypeUnqualified fqt, (count, fqt))
-  forM mTypeaheadData $ \typeaheadData ->
+  forM (NE.nonEmpty priorityList) $ \typeaheadData ->
     Ex.evaluate $ Control.DeepSeq.force $
       -- I believe deeply evaluating the PrioTrie is necessary because its very purpose is pre-computing stuff, ie. _not_ postponing evaluation until its result is demanded. For example, the sorted lists inside the PrioTrie must not be thunks, because that would mean we postpone sorting until a request demands it (which introduces unwanted latency for the first request that forces evaluation of a particular sorted list).
-      Data.PrioTrie.fromList limit typeaheadData
+      Data.PrioTrie.fromListDeriveKey limit deriveKey typeaheadData
   where
     lookupVertexId g vid = do
       DG.lookupVertexId g vid >>=
         maybe (fail $ "BUG: VertexId not found: " <> show vid) pure
 
     limit = maybe id (\l -> NE.fromList . NE.take (fromIntegral l)) mLimit
+
+-- | Match what the user enters with this string
+deriveKey :: FunGraph.FullyQualifiedType -> BS.ByteString
+deriveKey = TE.encodeUtf8 . FunGraph.renderFullyQualifiedTypeUnqualified
 
 handler
   :: Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType

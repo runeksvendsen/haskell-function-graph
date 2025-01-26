@@ -4,8 +4,9 @@ import qualified Spec.PrioTrie
 import qualified Test.Tasty as Tasty
 
 main :: IO ()
-main =
+main = do
+  prioTrieSpecSetup <- Spec.PrioTrie.setup
   Tasty.defaultMain $
     Tasty.testGroup "Properties"
-      [ Spec.PrioTrie.spec
+      [ Spec.PrioTrie.spec prioTrieSpecSetup
       ]

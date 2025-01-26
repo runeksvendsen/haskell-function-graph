@@ -13,6 +13,11 @@ module FunGraph.Build
     , buildConfig_excludeModulePatterns
   , FrozenGraph
   , Graph
+  -- * Re-exports
+  , Json.DeclarationMapJson
+  , T.Text
+  -- * For testing
+  , decodeDeclarationMap
   ) where
 
 import FunGraph.Types
@@ -35,6 +40,11 @@ fileReadDeclarationMap
   :: FilePath
   -> IO (Either String [Json.DeclarationMapJson T.Text])
 fileReadDeclarationMap fileName = A.eitherDecode <$> BSL.readFile fileName
+
+decodeDeclarationMap
+  :: BSL.ByteString
+  -> Either String [Json.DeclarationMapJson T.Text]
+decodeDeclarationMap = A.eitherDecode
 
 withGraphFromFile
   :: BuildConfig
