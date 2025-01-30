@@ -30,7 +30,6 @@ setup = do
   putStrLn "Done!"
   pure prioTrie'
 
--- TODO: production PrioTrie with limit result count
 spec
   :: Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType
   -> Tasty.TestTree
