@@ -38,31 +38,32 @@ spec productionPrioTrie =
     Tasty.testGroup "Data.PrioTrie"
       [ Tasty.testGroup "Positive"
         [ let genPrefix = const $ Data.ByteString.Char8.pack <$> arbitrary
-          in Tasty.testGroup "Arbitrary prefix"
-          [ Tasty.testGroup "Arbitrary PrioTrie" $
-              allProperties
-                arbitraryPrioItemsDeriveKey
-                (Right arbitraryPrioTrie)
-                genPrefix
-          , Tasty.testGroup "Production PrioTrie" $
-              allProperties
-                productionPrioItemsDeriveKey
-                (Left productionPrioTrie)
-                genPrefix
-          ]
+          in Tasty.testGroup "Arbitrary prefix" $
+            map (setMaxRatio 100)
+            [ Tasty.testGroup "Arbitrary PrioTrie" $
+                allProperties
+                  arbitraryPrioItemsDeriveKey
+                  (Right arbitraryPrioTrie)
+                  genPrefix
+            , Tasty.testGroup "Production PrioTrie" $
+                allProperties
+                  productionPrioItemsDeriveKey
+                  (Left productionPrioTrie)
+                  genPrefix
+            ]
         , let genPrefix deriveKey prioTrie =
                 let prioItems = snd <$> Data.PrioTrie.toListDeriveKey deriveKey prioTrie
                     mkArbitraryPrefix bs = (`BS.take` bs) <$> Test.QuickCheck.choose (0, BS.length bs)
                 in Test.QuickCheck.oneof $ map (mkArbitraryPrefix . deriveKey . snd) $ NE.toList prioItems
           in Tasty.testGroup "Chosen prefix"
           [ Tasty.testGroup "Arbitrary PrioTrie" $
-              map (scaleNumTests (*100)) $
+              map (scaleNumTests (*100) . setMaxRatio 1) $
               allProperties
                 arbitraryPrioItemsDeriveKey
                 (Right arbitraryPrioTrie)
                 (genPrefix arbitraryPrioItemsDeriveKey)
           , Tasty.testGroup "Production PrioTrie" $
-              map (scaleNumTests (*10)) $
+              map (scaleNumTests (*10) . setMaxRatio 1) $
               allProperties
                 productionPrioItemsDeriveKey
                 (Left productionPrioTrie)
@@ -109,14 +110,10 @@ allProperties
   -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
   -> [Tasty.TestTree]
 allProperties deriveKey ePrioTrie mkPrefixGen =
-  [ setMaxRatio 100 $
-      deriveKeyAppliedToResultHasTheGivenPrefix deriveKey ePrioTrie mkPrefixGen
-  , setMaxRatio 100 $
-      resultAndPriorityActuallyExistsInPrioTrie deriveKey ePrioTrie mkPrefixGen
-  , setMaxRatio 100 $
-      noValidResultsLeftOut deriveKey ePrioTrie mkPrefixGen
-  , setMaxRatio 100 $
-      resultPrioritiesAreDecreasing deriveKey ePrioTrie mkPrefixGen
+  [ deriveKeyAppliedToResultHasTheGivenPrefix deriveKey ePrioTrie mkPrefixGen
+  , resultAndPriorityActuallyExistsInPrioTrie deriveKey ePrioTrie mkPrefixGen
+  , noValidResultsLeftOut deriveKey ePrioTrie mkPrefixGen
+  , resultPrioritiesAreDecreasing deriveKey ePrioTrie mkPrefixGen
   ]
 
 genericProperty
@@ -196,7 +193,6 @@ noValidResultsLeftOut deriveKey ePrioTrie mkPrefixGen =
         let prioItems = snd <$> Data.PrioTrie.toListDeriveKey deriveKey prioTrie
             prioItemsWithKey = fmap (\trieItem -> (trieItem, deriveKey trieItem)) <$> prioItems
         in Set.fromList $ NE.toList prioItemsWithKey
-
     )
     prop
   where
