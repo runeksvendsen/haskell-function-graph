@@ -240,4 +240,5 @@ test-suite test-prop
     , tasty-quickcheck
     , aeson
     , deepseq
+    , containers
   default-language: Haskell2010
