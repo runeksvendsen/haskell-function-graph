@@ -62,6 +62,12 @@ jobs:
       - name: Run 'test-unit' test suite
         run: nix-shell --run "cabal test test-suite:test-unit --test-show-details=direct"
 
+      - name: Build 'test-prop' test suite
+        run: nix-shell --run "cabal build test-suite:test-prop"
+
+      - name: Run 'test-prop' test suite
+        run: nix-shell --run "cabal test test-suite:test-prop --test-show-details=direct"
+
       - name: Build 'test-web' test suite
         run: nix-shell --run "cabal build exe:test-web"
 
