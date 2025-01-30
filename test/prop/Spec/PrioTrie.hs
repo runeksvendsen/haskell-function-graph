@@ -1,7 +1,4 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use &&" #-}
-{-# LANGUAGE RankNTypes #-}
 module Spec.PrioTrie (spec, setup) where
 
 import qualified Control.DeepSeq
