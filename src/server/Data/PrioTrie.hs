@@ -3,6 +3,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -- TODO: document
 module Data.PrioTrie
 ( PrioTrie
@@ -12,21 +13,22 @@ module Data.PrioTrie
 )
 where
 
-import qualified Data.ByteString as BS
 import qualified Data.List.NonEmpty as NE
 import qualified Data.IntMap.Strict as IMap
 import qualified Data.Map.Strict as Map
-import Data.Word (Word8)
 import qualified Data.Set as Set
 import Data.Maybe (fromJust)
 import Data.List (sortOn)
 import Data.Ord (Down(Down))
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic, Generic1)
+import qualified Data.Char
+import Data.Bifunctor (first)
+import qualified Data.Text as T
 
 data PrioTrie prio a
   = PrioTrie_Node
-      !(IMap.IntMap (PrioTrie prio a))
+      !(CharMap (PrioTrie prio a))
       -- ^ Children
       !(NE.NonEmpty (prio, a))
       -- ^ List containing /all/ items that match the prefix reached through the 'IntMap'.
@@ -36,32 +38,32 @@ data PrioTrie prio a
 
 instance (NFData prio, NFData a) => NFData (PrioTrie prio a)
 
--- | Construct a 'PrioTrie' from a list of items and their priorities, deriving each 'BS.ByteString' key from the item
+-- | Construct a 'PrioTrie' from a list of items and their priorities, deriving each 'T.Text' key from the item
 fromListDeriveKey
   :: forall prio a.
      Ord prio
   => (NE.NonEmpty (prio, a) -> NE.NonEmpty (prio, a))
      -- ^ Modify the sorted list stored at each 'PrioTrie_Node'.
      -- Used to e.g. limit the number of items in the list.
-  -> (a -> BS.ByteString)
-     -- ^ Derive a 'BS.ByteString' from the item (@a@) stored in the 'PrioTrie'
+  -> (a -> T.Text)
+     -- ^ Derive a 'T.Text' from the item (@a@) stored in the 'PrioTrie'
   -> NE.NonEmpty (prio, a)
   -> PrioTrie prio a
 fromListDeriveKey modify deriveKey lst =
   fromList modify $ NE.map (\prioAndA -> (deriveKey $ snd prioAndA, prioAndA)) lst
 
--- | Construct a 'PrioTrie' from a list of items and their priorities with the given 'BS.ByteString' as key.
+-- | Construct a 'PrioTrie' from a list of items and their priorities with the given 'T.Text' as key.
 fromList
   :: forall prio a.
      Ord prio
   => (NE.NonEmpty (prio, a) -> NE.NonEmpty (prio, a))
      -- ^ Modify the sorted list stored at each 'PrioTrie_Node'.
      -- Used to e.g. limit the number of items in the list.
-  -> NE.NonEmpty (BS.ByteString, (prio, a))
+  -> NE.NonEmpty (T.Text, (prio, a))
   -> PrioTrie prio a
 fromList modify lst =
   let
-      initMap :: Map.Map BS.ByteString (NE.NonEmpty (prio, a)) -- unsorted!
+      initMap :: Map.Map T.Text (NE.NonEmpty (prio, a)) -- unsorted!
       -- ByteString -> [(144, Data.Internal.ByteString), (37, Data.Internal.Lazy.ByteString)]
       -- String -> [(12344, Data.String.String)]
       -- Tree -> [(13, Data.Tree.Tree), (7, Data.Tree.Special.Tree)]
@@ -71,63 +73,76 @@ fromList modify lst =
           (map (fmap NE.singleton) (NE.toList lst))
 
       mkUnconsMap
-        :: Map.Map BS.ByteString (NE.NonEmpty (prio, a))
-        -> Map.Map (Word8, BS.ByteString) (NE.NonEmpty (prio, a))
+        :: Map.Map T.Text (NE.NonEmpty (prio, a))
+        -> Map.Map (Char, T.Text) (NE.NonEmpty (prio, a))
       mkUnconsMap map' =
         Map.mapKeys fromJust $ -- safe because all 'Nothing' keys have been removed
           Map.withoutKeys
-            (Map.mapKeys BS.uncons map')
+            (Map.mapKeys T.uncons map')
             (Set.singleton Nothing)
 
       mkPrefixToList
-        :: Map.Map (Word8, BS.ByteString) (NE.NonEmpty (prio, a)) -- output of 'mkUnconsMap'
-        -> Map.Map Word8 (NE.NonEmpty (BS.ByteString, NE.NonEmpty (prio, a))) -- input to 'fromList' for each Word8-prefix
+        :: Map.Map (Char, T.Text) (NE.NonEmpty (prio, a)) -- output of 'mkUnconsMap'
+        -> Map.Map Char (NE.NonEmpty (T.Text, NE.NonEmpty (prio, a))) -- input to 'fromList' for each Char-prefix
       mkPrefixToList =
         Map.fromListWith (<>) -- TODO: performance
-          . map (\((w8, bs), ne) -> (w8, NE.singleton (bs, ne)))
+          . map (\((char, txt), ne) -> (char, NE.singleton (txt, ne)))
           . Map.toList
 
-      mkIntMap
-        :: Map.Map Word8 (NE.NonEmpty (BS.ByteString, NE.NonEmpty (prio, a))) -- output of 'mkPrefixToList'
-        -> IMap.IntMap (PrioTrie prio a) -- first argument to 'PrioTrie_Node'
-      mkIntMap =
-        IMap.fromList
+      mkCharMap
+        :: Map.Map Char (NE.NonEmpty (T.Text, NE.NonEmpty (prio, a))) -- output of 'mkPrefixToList'
+        -> CharMap (PrioTrie prio a) -- first argument to 'PrioTrie_Node'
+      mkCharMap =
+        fromListCharMap
           . Map.toList
           . Map.map (fromList modify)
-          . Map.map (NE.fromList . concatMap (\(bs, ne) -> map (bs,) (NE.toList ne)) . NE.toList)
-          . Map.mapKeys fromIntegral
+          . Map.map (NE.fromList . concatMap (\(txt, ne) -> map (txt,) (NE.toList ne)) . NE.toList)
 
-      intMap :: IMap.IntMap (PrioTrie prio a)
-      intMap =
-        mkIntMap $ mkPrefixToList $ mkUnconsMap initMap
+      charMap :: CharMap (PrioTrie prio a)
+      charMap =
+        mkCharMap $ mkPrefixToList $ mkUnconsMap initMap
 
       -- the non-empty input list sorted by priority (descending)
       nonEmpty = modify $
         NE.fromList . sortOn (Down . fst) $ map snd (NE.toList lst)
 
-  in PrioTrie_Node intMap nonEmpty
+  in PrioTrie_Node charMap nonEmpty
 
 -- | Convert a 'PrioTrie' to a list of keys and items (along with priority)
 --   given the @deriveKey@ function used to construct the 'PrioTrie' using 'fromListDeriveKey'
 toListDeriveKey
-  :: (a -> BS.ByteString)
-     -- ^ Derive a 'BS.ByteString' from the item (@a@) stored in the 'PrioTrie'
+  :: (a -> T.Text)
+     -- ^ Derive a 'T.Text' from the item (@a@) stored in the 'PrioTrie'
   -> PrioTrie prio a
-  -> NE.NonEmpty (BS.ByteString, (prio, a))
+  -> NE.NonEmpty (T.Text, (prio, a))
 toListDeriveKey deriveKey (PrioTrie_Node _ neList) =
   NE.map (\prioAndA -> (deriveKey $ snd prioAndA, prioAndA)) neList
 
 prefixLookup
   :: PrioTrie prio a
-  -> BS.ByteString
+  -> T.Text
   -> Maybe (NE.NonEmpty (prio, a))
-prefixLookup initTrie initBs =
-  let go (PrioTrie_Node intMap neList) bs =
-        case BS.uncons bs of
-          Nothing -> -- end of 'bs' reached
+prefixLookup initTrie prefix =
+  let go (PrioTrie_Node charMap neList) prefix' =
+        case T.uncons prefix' of
+          Nothing -> -- end of prefix reached
             Just neList
-          Just (w8, bsRem) -> --
-            case IMap.lookup (fromIntegral w8) intMap of
-              Just trie' -> go trie' bsRem
+          Just (char, prefixRem) -> --
+            case lookupCharMap char charMap of
+              Just trie' -> go trie' prefixRem
               Nothing -> Nothing
-  in go initTrie initBs
+  in go initTrie prefix
+
+-- ####################
+-- ##    Helpers     ##
+-- ####################
+
+-- | A map from a unicode character ('Char') to something
+newtype CharMap a = CharMap { unCharMap :: IMap.IntMap a }
+  deriving (Eq, Show, Functor, Generic, Generic1, NFData)
+
+lookupCharMap :: Char -> CharMap a -> Maybe a
+lookupCharMap c = IMap.lookup (Data.Char.ord c) . unCharMap
+
+fromListCharMap :: [(Char, a)] -> CharMap a
+fromListCharMap = CharMap . IMap.fromList . map (first Data.Char.ord)

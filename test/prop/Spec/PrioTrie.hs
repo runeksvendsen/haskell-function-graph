@@ -4,8 +4,7 @@ module Spec.PrioTrie (spec, setup) where
 import qualified Control.DeepSeq
 import qualified Control.Exception as Ex
 import qualified Control.Monad.ST as ST
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8
+import qualified Data.Text as T
 import qualified Data.List.NonEmpty as NE
 import qualified Data.PrioTrie
 import qualified Data.Set as Set
@@ -36,7 +35,7 @@ spec
 spec productionPrioTrie =
     Tasty.testGroup "Data.PrioTrie"
       [ Tasty.testGroup "Positive"
-        [ let genPrefix = const $ Data.ByteString.Char8.pack <$> arbitrary
+        [ let genPrefix = const $ T.pack <$> arbitrary
           in Tasty.testGroup "Arbitrary prefix" $
             map (setMaxRatio 100)
             [ Tasty.testGroup "Arbitrary PrioTrie" $
@@ -52,7 +51,7 @@ spec productionPrioTrie =
             ]
         , let genPrefix deriveKey prioTrie =
                 let prioItems = snd <$> Data.PrioTrie.toListDeriveKey deriveKey prioTrie
-                    mkArbitraryPrefix bs = (`BS.take` bs) <$> Test.QuickCheck.choose (0, BS.length bs)
+                    mkArbitraryPrefix txt = (`T.take` txt) <$> Test.QuickCheck.choose (0, T.length txt)
                 in Test.QuickCheck.oneof $ map (mkArbitraryPrefix . deriveKey . snd) $ NE.toList prioItems
           in Tasty.testGroup "Chosen prefix"
           [ Tasty.testGroup "Arbitrary PrioTrie" $
@@ -86,7 +85,7 @@ spec productionPrioTrie =
           let prioItems = NE.fromList $ Test.QuickCheck.getNonEmpty (fmap Test.QuickCheck.getLarge <$> prioAndAList)
           pure $ Data.PrioTrie.fromListDeriveKey id arbitraryPrioItemsDeriveKey prioItems
 
-        arbitraryPrioItemsDeriveKey = Data.ByteString.Char8.pack . show
+        arbitraryPrioItemsDeriveKey = T.pack . show
 
         productionPrioItemsDeriveKey = Server.Pages.Typeahead.deriveKey
 
@@ -104,9 +103,9 @@ apply =
 
 allProperties
   :: (Show triePrio, Show trieItem, Eq triePrio, Eq trieItem, Ord triePrio, Ord trieItem)
-  => (trieItem -> Data.ByteString.Char8.ByteString) -- ^ "Derive key"-function
+  => (trieItem -> T.Text) -- ^ "Derive key"-function
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
-  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
+  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen T.Text) -- ^ Prefix generator
   -> [Tasty.TestTree]
 allProperties deriveKey ePrioTrie mkPrefixGen =
   [ deriveKeyAppliedToResultHasTheGivenPrefix deriveKey ePrioTrie mkPrefixGen
@@ -119,10 +118,10 @@ genericProperty
   :: (Show triePrio, Show trieItem, TQC.Testable prop)
   => String -- ^ Property name
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
-  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
+  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen T.Text) -- ^ Prefix generator
   -> (Data.PrioTrie.PrioTrie triePrio trieItem -> a) -- ^ Pre-computed value available to the assertion function
   -> (   a
-      -> BS.ByteString -- Generated prefix
+      -> T.Text -- Generated prefix
       -> Maybe (NE.NonEmpty (triePrio, trieItem)) -- Return value of 'Data.PrioTrie.prefixLookup'
       -> prop
      ) -- ^ Assertion function
@@ -135,9 +134,9 @@ genericProperty name ePrioTrie mkPrefixGen assertValue assert =
     assert (assertValue prioTrie) prefix $ Data.PrioTrie.prefixLookup prioTrie prefix
 
 deriveKeyAppliedToResultHasTheGivenPrefix
-  :: (Show triePrio, Show trieItem) => (trieItem -> Data.ByteString.Char8.ByteString) -- ^ "Derive key"-function
+  :: (Show triePrio, Show trieItem) => (trieItem -> T.Text) -- ^ "Derive key"-function
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
-  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
+  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen T.Text) -- ^ Prefix generator
   -> Tasty.TestTree
 deriveKeyAppliedToResultHasTheGivenPrefix deriveKey ePrioTrie mkPrefixGen =
   genericProperty
@@ -151,15 +150,15 @@ deriveKeyAppliedToResultHasTheGivenPrefix deriveKey ePrioTrie mkPrefixGen =
       let results = fromMaybe TQC.discard mResults in
       all
       (\(_, item) ->
-        prefix `BS.isPrefixOf` deriveKey item
+        prefix `T.isPrefixOf` deriveKey item
       )
       results
 
 resultAndPriorityActuallyExistsInPrioTrie
   :: (Show triePrio, Show trieItem, Eq triePrio, Eq trieItem, Ord trieItem, Ord triePrio)
-  => (trieItem -> Data.ByteString.Char8.ByteString) -- ^ "Derive key"-function
+  => (trieItem -> T.Text) -- ^ "Derive key"-function
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
-  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
+  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen T.Text) -- ^ Prefix generator
   -> Tasty.TestTree
 resultAndPriorityActuallyExistsInPrioTrie deriveKey ePrioTrie mkPrefixGen =
   genericProperty
@@ -179,9 +178,9 @@ resultAndPriorityActuallyExistsInPrioTrie deriveKey ePrioTrie mkPrefixGen =
 
 noValidResultsLeftOut
   :: (Show triePrio, Show trieItem, Eq triePrio, Eq trieItem, Ord triePrio, Ord trieItem)
-  => (trieItem -> Data.ByteString.Char8.ByteString) -- ^ "Derive key"-function
+  => (trieItem -> T.Text) -- ^ "Derive key"-function
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
-  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
+  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen T.Text) -- ^ Prefix generator
   -> Tasty.TestTree
 noValidResultsLeftOut deriveKey ePrioTrie mkPrefixGen =
   genericProperty
@@ -200,14 +199,14 @@ noValidResultsLeftOut deriveKey ePrioTrie mkPrefixGen =
           resultSet = Set.fromList $ NE.toList results
           validResultSet =
               Set.map (\(triePrio, (trieItem, _)) -> (triePrio, trieItem))
-            $ Set.filter (\(_, (_, key)) -> prefix `BS.isPrefixOf` key) prioItemsWithKeySet
+            $ Set.filter (\(_, (_, key)) -> prefix `T.isPrefixOf` key) prioItemsWithKeySet
       in resultSet == validResultSet
 
 resultPrioritiesAreDecreasing
   :: (Show triePrio, Show trieItem, Eq triePrio, Eq trieItem, Ord triePrio)
-  => (trieItem -> Data.ByteString.Char8.ByteString) -- ^ "Derive key"-function
+  => (trieItem -> T.Text) -- ^ "Derive key"-function
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
-  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen BS.ByteString) -- ^ Prefix generator
+  -> (Data.PrioTrie.PrioTrie triePrio trieItem -> TQC.Gen T.Text) -- ^ Prefix generator
   -> Tasty.TestTree
 resultPrioritiesAreDecreasing _ ePrioTrie mkPrefixGen =
   genericProperty
@@ -248,15 +247,15 @@ resultPrioritiesAreDecreasing _ ePrioTrie mkPrefixGen =
 
 prefixLookupReturnsNothingForNonPrefix
   :: (Show triePrio, Show trieItem)
-  => (trieItem -> BS.ByteString)
+  => (trieItem -> T.Text)
   -> TestArgument (Data.PrioTrie.PrioTrie triePrio trieItem)
   -> Tasty.TestTree
 prefixLookupReturnsNothingForNonPrefix deriveKey ePrioTrie =
   let mkPrefixGen prioTrie =
         let prioItems = snd <$> Data.PrioTrie.toListDeriveKey deriveKey prioTrie
             keys = NE.map (deriveKey . snd) prioItems
-        in Test.QuickCheck.suchThat (Data.ByteString.Char8.pack <$> arbitrary) $ \bs ->
-              not $ any (BS.isPrefixOf bs) keys
+        in Test.QuickCheck.suchThat (T.pack <$> arbitrary) $ \txt ->
+              not $ any (T.isPrefixOf txt) keys
   in
   genericProperty
     "'prefixLookup' returns 'Nothing' for non-prefix"

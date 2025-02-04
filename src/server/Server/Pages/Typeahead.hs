@@ -20,9 +20,7 @@ import qualified Data.Graph.Digraph as DG
 import qualified Data.Map.Strict as Map
 import Data.Tuple (swap)
 import qualified Data.List.NonEmpty as NE
-import qualified Data.ByteString as BS
 import Control.Monad.Except (throwError)
-import qualified Data.Text.Encoding as TE
 import qualified Control.Exception as Ex
 import qualified Control.DeepSeq
 import qualified Control.Monad.ST as ST
@@ -47,7 +45,7 @@ mkHandler mLimit graph = do
   mPrioTrie <- mkPrioTrie mLimit graph
   prioTrie <- maybe (fail "empty input graph in Typeahead handler") pure mPrioTrie
   let initialSuggestions = suggestions prioTrie ""
-      lookupFunction prefix = fmap snd <$> Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
+      lookupFunction prefix = fmap snd <$> Data.PrioTrie.prefixLookup prioTrie prefix
   pure (handler prioTrie, lookupFunction, initialSuggestions)
 
 -- | For each vertex (type), count the number of different packages that export a function which operates on this vertex (type).
@@ -91,8 +89,8 @@ mkPrioTrie mLimit graph = do
     limit = maybe id (\l -> NE.fromList . NE.take (fromIntegral l)) mLimit
 
 -- | Match what the user enters with this string
-deriveKey :: FunGraph.FullyQualifiedType -> BS.ByteString
-deriveKey = TE.encodeUtf8 . FunGraph.renderFullyQualifiedTypeUnqualified
+deriveKey :: FunGraph.FullyQualifiedType -> T.Text
+deriveKey = FunGraph.renderFullyQualifiedTypeUnqualified
 
 handler
   :: Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType
@@ -113,7 +111,7 @@ suggestions prioTrie prefix = do
   forM_ mSuggestions $ \suggestionsLst ->
     forM_ suggestionsLst $ \(_, fqt) -> suggestionOption_ [] fqt
   where
-    mSuggestions = Data.PrioTrie.prefixLookup prioTrie (TE.encodeUtf8 prefix)
+    mSuggestions = Data.PrioTrie.prefixLookup prioTrie prefix
 
 suggestionOption_ :: [Attribute] -> FunGraph.FullyQualifiedType -> Html ()
 suggestionOption_ extraAttrs fqt =
