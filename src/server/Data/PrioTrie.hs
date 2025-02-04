@@ -85,7 +85,7 @@ fromList modify lst =
         :: Map.Map (Char, T.Text) (NE.NonEmpty (prio, a)) -- output of 'mkUnconsMap'
         -> Map.Map Char (NE.NonEmpty (T.Text, NE.NonEmpty (prio, a))) -- input to 'fromList' for each Char-prefix
       mkPrefixToList =
-        Map.fromListWith (<>) -- TODO: performance
+        Map.fromListWith (<>) -- NOTE: this is fine performance-wise because (<>) for the non-empty list takes linear time in the number of elements of the _first_ list, and the first list is the singleton list
           . map (\((char, txt), ne) -> (char, NE.singleton (txt, ne)))
           . Map.toList
 
