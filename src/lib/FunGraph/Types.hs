@@ -38,7 +38,6 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import qualified Types
-import Data.Maybe (fromMaybe)
 import GHC.Stack (HasCallStack)
 import qualified Data.Hashable.Generic
 
@@ -293,10 +292,9 @@ declarationMapJsonToFunctions
   -> [TypedFunction]
 declarationMapJsonToFunctions dmj = concat $
   Map.toList moduleDeclarations <&> \(moduleName, nameMap) ->
-    Map.toList nameMap <&> \(functionName, typeInfo) ->
-      Function functionName moduleName package (FullyQualifiedType <$> typeInfoToFunctionType typeInfo)
+    Map.toList nameMap <&> \(functionName, functionType) ->
+      Function functionName moduleName package (FullyQualifiedType <$> functionType)
   where
-    typeInfoToFunctionType ti = fromMaybe (Json.typeInfo_unexpanded ti) (Json.typeInfo_expanded ti)
     moduleDeclarations = Json.moduleDeclarations_map (Json.declarationMapJson_moduleDeclarations dmj)
     package = Json.declarationMapJson_package dmj
 
