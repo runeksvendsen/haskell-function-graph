@@ -358,13 +358,10 @@ page cfg searchEnv src dst maxCount' mNoGraph = do
     renderResult :: ([FunGraph.TypedFunction], Word) -> Html ()
     renderResult (fns, resultNumber) =
       let renderSingleFn fn =
-            let (fromTy, toTy) = FunGraph.typedFunctionFromToTypes fn
-                typeSig = T.unwords
+            let typeSig = T.unwords
                   [ FunGraph.renderFunction fn
                   , "::"
-                  , FunGraph.fullyQualifiedTypeToText fromTy
-                  , "->"
-                  , FunGraph.fullyQualifiedTypeToText toTy
+                  , FunGraph.renderTypedFunction fn
                   ]
                 functionNameWithLink :: Html ()
                 functionNameWithLink = a_

@@ -14,7 +14,7 @@ module FunGraph.Types
   , renderComposedFunctions
   , renderComposedFunctionsStr
   , parseComposedFunctions, parseComposedFunctionsNoPackage
-  , renderFunction, renderFunctionNoPackage, functionToHackageDocsUrl
+  , renderFunction, renderFunctionNoPackage, renderTypedFunction, renderFunctionTypeSig, functionToHackageDocsUrl
   , typedFunctionFromToTypes
   , parseIdentifier, parseFunction, parseFunctionNoPackage
   , fqtPackage
@@ -125,6 +125,22 @@ renderFunctionNoPackage :: Function typeSig -> T.Text
 renderFunctionNoPackage fn =
   _function_module fn <> "." <> _function_name fn
 
+renderTypedFunction
+  :: TypedFunction
+  -> T.Text
+renderTypedFunction tp =
+  renderFunctionTypeSig $ _function_typeSig tp
+
+renderFunctionTypeSig
+  :: Types.FunctionType FullyQualifiedType
+  -> T.Text
+renderFunctionTypeSig typeSig =
+  T.unwords
+    [ renderFullyQualifiedType $ Types.functionType_arg typeSig
+    , "->"
+    , renderFullyQualifiedType $ Types.functionType_ret typeSig
+    ]
+
 -- | Render as URL to Hackage documentation.
 --
 -- Examples:
@@ -164,7 +180,7 @@ typedFunctionFromToTypes
   -> (FullyQualifiedType, FullyQualifiedType)
   -- ^ (FROM type, TO type)
 typedFunctionFromToTypes fn =
-  (Json.functionType_arg sig, Json.functionType_ret sig)
+  (Types.functionType_arg sig, Types.functionType_ret sig)
   where
     sig = _function_typeSig fn
 
@@ -206,7 +222,7 @@ parseIdentifier txt = do
   pure (name, moduleName, package)
 
 -- | A typed 'Function'
-type TypedFunction = Function (Json.FunctionType FullyQualifiedType)
+type TypedFunction = Function (Types.FunctionType FullyQualifiedType)
 
 -- | A untyped 'Function'
 type UntypedFunction = Function ()
@@ -226,10 +242,7 @@ instance Show PrettyTypedFunction where
           , "."
           , _function_name fun
           ] ++
-            let sig = _function_typeSig fun
-                arg = unFullyQualifiedType $ Json.functionType_arg sig
-                ret = unFullyQualifiedType $ Json.functionType_ret sig
-            in [" :: ", Types.renderFgTypeFgTyConQualified arg, " -> ", Types.renderFgTypeFgTyConQualified ret]
+          [" :: ", renderTypedFunction fun]
 
 newtype FullyQualifiedType = FullyQualifiedType
   { unFullyQualifiedType :: Types.FgType (Types.FgTyCon T.Text) }
@@ -293,14 +306,14 @@ declarationMapJsonToFunctions
 declarationMapJsonToFunctions dmj = concat $
   Map.toList moduleDeclarations <&> \(moduleName, nameMap) ->
     Map.toList nameMap <&> \(functionName, functionType) ->
-      Function functionName moduleName package (FullyQualifiedType <$> functionType)
+      Function functionName moduleName package (FullyQualifiedType <$> error "WIP" ) -- functionType
   where
     moduleDeclarations = Json.moduleDeclarations_map (Json.declarationMapJson_moduleDeclarations dmj)
     package = Json.declarationMapJson_package dmj
 
 instance DG.DirectedEdge TypedFunction FullyQualifiedType TypedFunction where
-  fromNode = Json.functionType_arg . _function_typeSig
-  toNode = Json.functionType_ret . _function_typeSig
+  fromNode = Types.functionType_arg . _function_typeSig
+  toNode = Types.functionType_ret . _function_typeSig
   metaData = id
 
 -- | Parse a type constructor of zero arity, ie. one that is not applied to any type(s).

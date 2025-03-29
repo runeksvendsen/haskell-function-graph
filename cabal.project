@@ -8,7 +8,7 @@ test-show-details: direct
 source-repository-package
     type: git
     location: https://github.com/runeksvendsen/dump-decls.git
-    tag: 87a2effa9a86b9242c62700adc49a4b3ab0e5a3a
+    tag: eb4238e8ec86b1a47933135917ee33ca3ca17a31
     subdir: dump-decls-lib
 
 source-repository-package

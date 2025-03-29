@@ -27,6 +27,10 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import qualified Types
 import qualified Data.Text as T
+import qualified Types.Doodle
+import qualified Debug.Trace
+import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -98,6 +102,45 @@ buildGraphMut cfg =
         . filter (not . isExcludedFunction) -- remove excluded functions
         . concatMap declarationMapJsonToFunctions
         . filter (not . isExcludedPackage) -- remove excluded packages
+
+    tmpPrintExtendedFunctions
+      :: [Json.DeclarationMapJson T.Text]
+      -> ()
+    tmpPrintExtendedFunctions declarationMapJsonLst =
+      let extract
+            :: Json.DeclarationMapJson T.Text
+            -> [Types.Doodle.SomeFunction]
+          extract =
+              concatMap Map.elems
+            . Map.elems
+            . Json.moduleDeclarations_map
+            . Json.declarationMapJson_moduleDeclarations
+
+          traceIt
+            :: [Types.FunctionType (FgType (Types.FgTyCon T.Text))]
+            -> ()
+          traceIt = foldr
+            (\typedFunction () -> T.unpack (renderFunctionType typedFunction) `Debug.Trace.trace` ())
+            ()
+
+          renderFunctionType
+            :: Types.FunctionType (FgType (Types.FgTyCon T.Text))
+            -> T.Text
+          renderFunctionType = error "WIP"
+
+          someFunctions = concatMap extract declarationMapJsonLst
+
+          monoFuns =
+            Data.Maybe.mapMaybe Types.Doodle.someFunctionMonomorphic someFunctions
+
+          polyFuns :: [Types.Doodle.FunctionTypeForall T.Text T.Text]
+          polyFuns =
+            Data.Maybe.mapMaybe Types.Doodle.someFunctionPolymorphic someFunctions
+
+      in traceIt $ Types.Doodle.extendFrom
+          monoFuns
+          polyFuns
+
 
 -- | Excludes various preludes and internal modules
 defaultBuildConfig :: BuildConfig
