@@ -40,8 +40,6 @@ library
                     , transformers
                     -- FunGraph.Util
                     , lucid
-                    -- TMP debugging
-                    , ansi-terminal
     hs-source-dirs:   src/lib
     default-language: Haskell2010
 
@@ -132,7 +130,13 @@ executable function-graph
     import:           warnings
     main-is:          Main.hs
     hs-source-dirs:   app
-    build-depends:    base, function-graph, bellman-ford, containers, ansi-terminal, text
+    build-depends:    base
+                    , function-graph
+                    , bellman-ford
+                    , containers
+                    , ansi-terminal
+                    , text
+                    , dump-decls-lib
     default-language: Haskell2010
 
 benchmark benchmark-lib
