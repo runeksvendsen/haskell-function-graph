@@ -22,7 +22,7 @@ import Test.QuickCheck (arbitrary, forAll)
 setup :: IO (Data.PrioTrie.PrioTrie Word FunGraph.FullyQualifiedType)
 setup = do
   putStrLn "Constructing priority trie..."
-  graphData <- getDataFileName "data/all3.json" >>= FunGraph.fileReadDeclarationMap >>= either fail pure
+  graphData <- getDataFileName "data/new-forall.json" >>= FunGraph.fileReadDeclarationMap >>= either fail pure
   graph <- ST.stToIO $ FunGraph.buildGraphMut FunGraph.defaultBuildConfig graphData
   prioTrie <- Server.Pages.Typeahead.mkPrioTrie Nothing graph >>= maybe (fail "empty graph data file") pure
   prioTrie' <- Ex.evaluate $ Control.DeepSeq.force prioTrie

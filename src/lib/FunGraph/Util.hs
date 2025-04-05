@@ -14,7 +14,6 @@ module FunGraph.Util
   where
 
 import FunGraph.Types
-import qualified Json
 import qualified Data.Graph.Digraph as DG
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
@@ -47,8 +46,8 @@ toPathTypes getTo getFrom = \case
 -- | 'toPathTypes' specialized to 'TypedFunction'
 typedFunctionsPathTypes :: [TypedFunction] -> [FullyQualifiedType]
 typedFunctionsPathTypes = toPathTypes
-  (Json.functionType_ret . _function_typeSig)
-  (Json.functionType_arg . _function_typeSig)
+  (Types.functionType_ret . _function_typeSig)
+  (Types.functionType_arg . _function_typeSig)
 
 -- | 'toPathTypes' specialized to 'DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)'
 idxEdgePathTypes

@@ -25,7 +25,7 @@ let
   dump-decls-lib =
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/dump-decls.git";
-      rev = "496fc63c1279aedcdf7143c5ea85970e63a2ba0a";
+      rev = "c72964b354aa90c66a209f7b62756926877f3bfd";
     };
     in import (src + "/dump-decls-lib") { inherit nixpkgs compiler; };
 

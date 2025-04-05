@@ -29,7 +29,7 @@ module FunGraph
   -- * Re-exports
   , module Types
   , module Export
-  , Json.FunctionType
+  , Types.FunctionType
   , DG.IDigraph, DG.Digraph
   , NE.NonEmpty
   , DG.freeze, DG.thaw
@@ -38,7 +38,6 @@ module FunGraph
 import FunGraph.Types as Types
 import FunGraph.Util
 import FunGraph.Build as Export
-import qualified Json
 import qualified Data.Graph.Digraph as DG
 import qualified Data.Graph.Dijkstra as Dijkstra
 import Control.Monad.ST (ST, RealWorld)
@@ -337,13 +336,13 @@ traceFunDebugGeneric traceFun = \case
           { _function_name = "toStrict"
           , _function_module = "Data.ByteString"
           , _function_package = parsePackageWithVersion' "bytestring-0.11.4.0"
-          , _function_typeSig = Json.FunctionType () ()
+          , _function_typeSig = Types.FunctionType () ()
           }
       , Function
           { _function_name = "encodeUtf16LE"
           , _function_module = "Data.Text.Lazy.Encoding"
           , _function_package = parsePackageWithVersion' "text-2.0.2"
-          , _function_typeSig = Json.FunctionType () ()
+          , _function_typeSig = Types.FunctionType () ()
           }
       ]
 

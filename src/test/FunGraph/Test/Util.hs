@@ -42,7 +42,7 @@ import Test.Hspec.Expectations.Pretty (shouldBe)
 import Lucid.Base (Html)
 
 testDataFileName :: FilePath
-testDataFileName = "data/all3.json"
+testDataFileName = "data/new-forall.json"
 
 isSupersetOf :: (Show a, Ord a) => Set.Set a -> Set.Set a -> IO ()
 isSupersetOf actual expected =

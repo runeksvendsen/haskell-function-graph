@@ -197,7 +197,7 @@ case5 =
     stringTemplate = FunGraph.parsePprTyConMulti $
       FunGraph.FgType_TyConApp
         "HStringTemplate-0.8.8:Text.StringTemplate.Base.StringTemplate"
-        [FunGraph.FgType_List $ FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []]
+        [FunGraph.FgType_List $ Just $ FunGraph.FgType_TyConApp "ghc-prim-0.10.0:GHC.Types.Char" []]
 
 -- Also a slow web query (~20s) with maxCount=100
 case6 :: QueryTest
