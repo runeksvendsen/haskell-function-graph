@@ -2,6 +2,8 @@ name: Build & test in nix-shell
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
