@@ -31,6 +31,8 @@ import qualified Types.Doodle
 import qualified Debug.Trace
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
+import Data.Foldable (foldl')
+import qualified System.Console.ANSI as ANSI
 
 type FrozenGraph = DG.IDigraph FullyQualifiedType (NE.NonEmpty TypedFunction)
 type Graph s = DG.Digraph s FullyQualifiedType (NE.NonEmpty TypedFunction)
@@ -101,46 +103,86 @@ buildGraphMut cfg =
         . nubOrdOn functionIdentity -- remove duplicates
         . filter (not . isExcludedFunction) -- remove excluded functions
         . concatMap declarationMapJsonToFunctions
+        . tmpPrintExtendedFunctions
         . filter (not . isExcludedPackage) -- remove excluded packages
 
-    tmpPrintExtendedFunctions
-      :: [Json.DeclarationMapJson T.Text]
-      -> ()
-    tmpPrintExtendedFunctions declarationMapJsonLst =
-      let extract
-            :: Json.DeclarationMapJson T.Text
-            -> [Types.Doodle.SomeFunction]
-          extract =
-              concatMap Map.elems
-            . Map.elems
-            . Json.moduleDeclarations_map
-            . Json.declarationMapJson_moduleDeclarations
+tmpPrintExtendedFunctions
+  :: [Json.DeclarationMapJson T.Text]
+  -> [Json.DeclarationMapJson T.Text]
+tmpPrintExtendedFunctions declarationMapJsonLst =
+  traceIt
+    (Types.Doodle.extendFrom monoFuns polyFuns)
+    declarationMapJsonLst
+  where
+    extract
+      :: Json.DeclarationMapJson T.Text
+      -> [(T.Text, Types.Doodle.SomeFunction)] -- (fully qualified name, type). e.g. ("Data.List.head", "[a] -> a")
+    extract =
+        concatMap
+          (\(moduleName, nameToTypeMap) ->
+            let assocs = Map.assocs nameToTypeMap
+                funMetaData (funName, funType) = T.pack $ unlines
+                  [ ("\t" <>) $ color ANSI.Red $ T.unpack $ moduleName <> "." <> funName
+                  , "\t\t" <> " :: " <> color ANSI.Blue (T.unpack $ Types.Doodle.renderSomeFunctionType funType)
+                  ]
+            in map (\(funName, funType) -> (funMetaData (funName, funType), funType)) assocs
+          )
+      . Map.assocs
+      . Json.moduleDeclarations_map
+      . Json.declarationMapJson_moduleDeclarations
 
-          traceIt
-            :: [Types.FunctionType (FgType (Types.FgTyCon T.Text))]
-            -> ()
-          traceIt = foldr
-            (\typedFunction () -> T.unpack (renderFunctionType typedFunction) `Debug.Trace.trace` ())
-            ()
+    someFunctions = concatMap extract declarationMapJsonLst
 
-          renderFunctionType
-            :: Types.FunctionType (FgType (Types.FgTyCon T.Text))
-            -> T.Text
-          renderFunctionType = error "WIP"
+    monoFuns :: [(T.Text, Types.FunctionType (FgType (Types.FgTyCon T.Text)))]
+    monoFuns =
+      Data.Maybe.mapMaybe (traverse Types.Doodle.someFunctionMonomorphic) someFunctions
 
-          someFunctions = concatMap extract declarationMapJsonLst
+    polyFuns :: [(T.Text, Types.Doodle.FunctionTypeForall T.Text T.Text)]
+    polyFuns =
+      Data.Maybe.mapMaybe (traverse Types.Doodle.someFunctionPolymorphic) someFunctions
 
-          monoFuns =
-            Data.Maybe.mapMaybe Types.Doodle.someFunctionMonomorphic someFunctions
+    traceIt
+      :: [((T.Text, T.Text), Either String (Types.FunctionType (FgType (Types.FgTyCon T.Text))))]
+      -> ret
+      -> ret
+    traceIt ftl ret = "" `Debug.Trace.trace` foldl'
+      (\() blah -> mkTraceString blah `Debug.Trace.trace` ())
+      ()
+      ftl `seq` ret
 
-          polyFuns :: [Types.Doodle.FunctionTypeForall T.Text T.Text]
-          polyFuns =
-            Data.Maybe.mapMaybe Types.Doodle.someFunctionPolymorphic someFunctions
+    mkTraceString ((monoName, polyName), eTypedFunction) =
+      let resultType =
+            either
+              ("ERROR: " <>)
+              (\ft -> ":: " <> color ANSI.Blue (T.unpack (renderFunctionType ft)))
+              eTypedFunction
+      in
+      unlines
+        [ "Extending from"
+        , T.unpack monoName
+        , "\t" <> "with"
+        , T.unpack polyName
+        , "\t" <> "resulting in"
+        , "\t\t" <> resultType
+        , ""
+        ]
 
-      in traceIt $ Types.Doodle.extendFrom
-          monoFuns
-          polyFuns
+    color :: ANSI.Color -> String -> String
+    color color' str = concat
+      [ ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Dull color']
+      , str
+      , ANSI.setSGRCode [ANSI.Reset]
+      ]
 
+    renderFunctionType
+      :: Types.FunctionType (FgType (Types.FgTyCon T.Text))
+      -> T.Text
+    renderFunctionType ft =
+      T.unwords
+        [ Types.renderFgTypeFgTyConQualifiedNoPackage $ Types.functionType_arg ft
+        , "->"
+        , Types.renderFgTypeFgTyConQualifiedNoPackage $ Types.functionType_ret ft
+        ]
 
 -- | Excludes various preludes and internal modules
 defaultBuildConfig :: BuildConfig
