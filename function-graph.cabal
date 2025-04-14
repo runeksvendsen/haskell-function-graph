@@ -53,6 +53,8 @@ library function-graph-server
                       Server.Pages.Typeahead
                       Server.GraphViz
                       Server.HtmlStream
+                      Server.CLI
+                      Server.Config
                       Data.BalancedStream
                       Data.PrioTrie
     build-depends:    base
@@ -81,6 +83,8 @@ library function-graph-server
                     , file-embed
                     , these
                     , dump-decls-lib
+                    , optparse-applicative
+                    , ansi-terminal
     hs-source-dirs:   src/server
     default-language: Haskell2010
 
