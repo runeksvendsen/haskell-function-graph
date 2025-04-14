@@ -7,7 +7,7 @@ A form of "Hoogle type search" for functions. Enables finding a sequence of comp
 Run
 
 ```
-nix-shell --run 'cabal run server -- 8080 data/all3.json'
+nix-shell --run 'cabal run server -- -p 8080 -g data/all3.json
 ```
 
 and visit http://localhost:8080.
@@ -17,7 +17,7 @@ and visit http://localhost:8080.
 Run
 
 ```
-$(nix-build --no-out-link)/bin/server-wrapped 8080 data/all3.json
+$(nix-build --no-out-link)/bin/server-wrapped -p 8080 -g data/all3.json
 ```
 
 ## Demo
