@@ -80,22 +80,22 @@ spTreePathsCount :: [NE.NonEmpty edge] -> Int
 spTreePathsCount = do
   product . map NE.length
 
-functionWeight :: (FullyQualifiedType, FullyQualifiedType) -> TypedFunction -> Double
-functionWeight (src, dst) function
+functionWeight :: (FullyQualifiedType, Maybe FullyQualifiedType) -> TypedFunction -> Double
+functionWeight (src, mDst) function
   -- NOTE: We want to prioritize a function from the same package as the src/dst type -- e.g. a function from the "text" package in case we want to go to/from the "Text" type.
   -- TODO: but what what about e.g. "Maybe Text" (where "Maybe" is defined in "base" and "Text" in "text")?
-  | srcPkg == fnPkg || dstPkg == fnPkg = 0.5
+  | srcPkg == fnPkg || mDstPkg == Just fnPkg = 0.5
   | otherwise = 1
   where
     fnPkg = [_function_package function]
-    (srcPkg, dstPkg) = (fqtPackage src, fqtPackage dst)
+    (srcPkg, mDstPkg) = (fqtPackage src, fqtPackage <$> mDst)
     -- TODO: 'fqtPackage' ignores the package of the type constructors for list, tuples and unit. So e.g. both "[Char]" and "Char" will return only the package for "Char".
 
 queryTreeAndPathsGA
   :: ( v ~ FullyQualifiedType
      )
   => Int -- max count
-  -> (v, v)
+  -> (v, Maybe v)
   -- ^ (src, dst)
   -> GraphAction s v (NE.NonEmpty TypedFunction)
        ([([NE.NonEmpty TypedFunction], Double)], [([TypedFunction], Double)])
@@ -108,10 +108,10 @@ queryPathsGA
   :: ( v ~ FullyQualifiedType
      )
   => Int
-  -> (v, v) -- ^ (src, dst)
+  -> (v, Maybe v) -- ^ (src, dst)
   -> GraphAction s v (NE.NonEmpty TypedFunction) [([TypedFunction], Double)]
-queryPathsGA maxCount (src, dst) =
-  queryResultTreeToPaths maxCount (src, dst) <$> queryTreeGA maxCount (src, dst)
+queryPathsGA maxCount (src, mDst) =
+  queryResultTreeToPaths maxCount (src, mDst) <$> queryTreeGA maxCount (src, mDst)
 
 -- | Convert the "shortest path"-tree produced by 'queryTreeGA'
 --   to a list of shortest paths.
@@ -119,17 +119,17 @@ queryPathsGA maxCount (src, dst) =
 --   TODO: avoid sorting
 queryResultTreeToPaths
   :: Int -- ^ maxCount
-  -> (FullyQualifiedType, FullyQualifiedType) -- ^ (src, dst)
+  -> (FullyQualifiedType, Maybe FullyQualifiedType) -- ^ (src, dst)
   -> [([NE.NonEmpty TypedFunction], Double)] -- ^ Output of 'queryTreeGA'
   -> [([TypedFunction], Double)]
-queryResultTreeToPaths maxCount (src, dst) res = take maxCount $
+queryResultTreeToPaths maxCount (src, mDst) res = take maxCount $
     sortOn (sortOnFun . fst)
     $ concatMap (\(nePath, weight) -> map (,weight) . spTreeToPaths $ nePath )
       res
   where
     sortOnFun path =
       ( length path
-      , sum $ map (functionWeight (src, dst)) path
+      , sum $ map (functionWeight (src, mDst)) path
       , if allFromSamePackage path then 0 else 1 :: Int
       )
 
@@ -157,7 +157,7 @@ queryTreeTimeoutIO
   => DG.Digraph RealWorld v meta
   -> Data.Time.NominalDiffTime
   -> Int
-  -> (v, v)
+  -> (v, Maybe v)
   -> ExceptT (GraphActionError v) IO
       (S.Stream
         (S.Of ([NE.NonEmpty TypedFunction], Double))
@@ -175,7 +175,7 @@ queryTreeTimeoutIOTrace
   -> DG.Digraph RealWorld v meta
   -> Data.Time.NominalDiffTime
   -> Int
-  -> (v, v)
+  -> (v, Maybe v)
   -> ExceptT (GraphActionError v) IO
       (S.Stream (S.Of ([meta], Double)) IO (Maybe ()) )
 queryTreeTimeoutIOTrace traceFun g =
@@ -190,22 +190,22 @@ queryTreeTimeoutIO'
   -> (forall a. DG.Digraph RealWorld v meta -> (Double -> meta -> Double) -> Double -> Dijkstra.Dijkstra RealWorld v meta a -> ST RealWorld a)
   -> Data.Time.NominalDiffTime
   -> Int
-  -> (v, v)
+  -> (v, Maybe v)
   -> ExceptT (GraphActionError v) IO
       (S.Stream
         (S.Of ([NE.NonEmpty TypedFunction], Double))
         IO
         (Maybe ()) -- 'Nothing' means "timeout", 'Just' means "no timeout"
       )
-queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
+queryTreeTimeoutIO' graph runner timeout maxCount (src, mDst) = do
   srcVid <- lookupVertex src
-  dstVid <- lookupVertex dst
+  mDstVid <- traverse lookupVertex mDst
   let timeoutMicros = ceiling $ Data.Time.nominalDiffTimeToSeconds timeout * 1e6
       stream =
         Streaming.Prelude.Extras.timeoutStream timeoutMicros $
           S.take maxCount $
           S.hoistUnexposed runner' $ -- NOTE: Using 'S.hoist' doesn't work, but this does. I don't know why.
-            Dijkstra.dijkstraShortestPathsLevelsStream maxCount 1 (srcVid, dstVid) -- TODO: factor out "level" arg
+            Dijkstra.dijkstraShortestPathsLevelsStream maxCount 10 (srcVid, mDstVid) -- TODO: factor out "level" arg
       mapStream
         :: S.Of ([DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)], Double) a
         -> S.Of ([NE.NonEmpty TypedFunction], Double) a
@@ -227,7 +227,7 @@ queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
     removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
     removeNonMin functions =
       let minWeight = weightCombine 0 functions
-          filterFun functionNE = functionWeight (src, dst) functionNE == minWeight
+          filterFun functionNE = functionWeight (src, mDst) functionNE == minWeight
       in NE.fromList $ NE.filter filterFun functions
 
     initialWeight :: Double
@@ -241,20 +241,20 @@ queryTreeTimeoutIO' graph runner timeout maxCount (src, dst) = do
       w + edgeWeightNE
       where
         edgeWeightNE =
-          minimum $ map (functionWeight (src, dst)) (NE.toList functions)
+          minimum $ map (functionWeight (src, mDst)) (NE.toList functions)
 
 queryTreeGA
   :: ( v ~ FullyQualifiedType
      , meta ~ NE.NonEmpty TypedFunction
      )
   => Int
-  -> (v, v)
+  -> (v, Maybe v)
   -> GraphAction s v meta [([meta], Double)]
-queryTreeGA maxCount (src, dst) =
+queryTreeGA maxCount (src, mDst) =
   GraphAction weightCombine initialWeight $ do
     srcVid <- lookupVertex src
-    dstVid <- lookupVertex dst
-    res <- ET.lift $ Dijkstra.dijkstraShortestPathsLevels maxCount 1 (srcVid, dstVid) -- TODO: factor out "level" arg
+    mDstVid <- traverse lookupVertex mDst
+    res <- ET.lift $ Dijkstra.dijkstraShortestPathsLevels maxCount 1 (srcVid, mDstVid) -- TODO: factor out "level" arg
     pure $ map (first (map (removeNonMin . DG.eMeta))) res
   where
     lookupVertex v = do
@@ -270,7 +270,7 @@ queryTreeGA maxCount (src, dst) =
     removeNonMin :: NE.NonEmpty TypedFunction -> NE.NonEmpty TypedFunction
     removeNonMin functions =
       let minWeight = weightCombine 0 functions
-          filterFun functionNE = functionWeight (src, dst) functionNE == minWeight
+          filterFun functionNE = functionWeight (src, mDst) functionNE == minWeight
       in NE.fromList $ NE.filter filterFun functions
 
     initialWeight :: Double
@@ -284,7 +284,7 @@ queryTreeGA maxCount (src, dst) =
       w + edgeWeightNE
       where
         edgeWeightNE =
-          minimum $ map (functionWeight (src, dst)) (NE.toList functions)
+          minimum $ map (functionWeight (src, mDst)) (NE.toList functions)
 
 traceFunDebugGeneric
   :: (String -> ST s ()) -- ^ Trace function
