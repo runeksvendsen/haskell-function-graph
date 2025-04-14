@@ -46,7 +46,7 @@ import Data.Functor (void, (<&>))
 import Data.List (foldl', sortOn, intercalate)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-import Data.Maybe (listToMaybe)
+import Data.Maybe (listToMaybe, isJust)
 import Debug.Trace (traceM)
 import Control.Applicative ((<|>))
 import Data.Bifunctor (first)
@@ -201,11 +201,12 @@ queryTreeTimeoutIO' graph runner timeout maxCount (src, mDst) = do
   srcVid <- lookupVertex src
   mDstVid <- traverse lookupVertex mDst
   let timeoutMicros = ceiling $ Data.Time.nominalDiffTimeToSeconds timeout * 1e6
+      levels = if isJust mDst then 1 else maxBound -- in the case of no destination vertex let 'maxCount' be the limiting factor. there's no knowing what the weight of the first path found is, and thus how many levels we should accept.
       stream =
         Streaming.Prelude.Extras.timeoutStream timeoutMicros $
           S.take maxCount $
           S.hoistUnexposed runner' $ -- NOTE: Using 'S.hoist' doesn't work, but this does. I don't know why.
-            Dijkstra.dijkstraShortestPathsLevelsStream maxCount 10 (srcVid, mDstVid) -- TODO: factor out "level" arg
+            Dijkstra.dijkstraShortestPathsLevelsStream maxCount levels (srcVid, mDstVid) -- TODO: factor out "level" arg
       mapStream
         :: S.Of ([DG.IdxEdge FullyQualifiedType (NE.NonEmpty TypedFunction)], Double) a
         -> S.Of ([NE.NonEmpty TypedFunction], Double) a
