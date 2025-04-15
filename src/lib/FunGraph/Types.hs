@@ -13,6 +13,8 @@ module FunGraph.Types
   , functionPackageNoVersion, renderFunctionPackage
   , renderComposedFunctions
   , renderComposedFunctionsStr
+  , retComposedFunctions
+  , argComposedFunctions
   , parseComposedFunctions, parseComposedFunctionsNoPackage
   , renderFunction, renderFunctionNoPackage, functionToHackageDocsUrl
   , typedFunctionFromToTypes
@@ -38,7 +40,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import Control.DeepSeq (NFData)
 import qualified Types
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import GHC.Stack (HasCallStack)
 import qualified Data.Hashable.Generic
 
@@ -71,6 +73,20 @@ renderFunctionPackage
   -> T.Text
 renderFunctionPackage =
   Types.renderFgPackage . _function_package
+
+-- | Return type of composed functions.
+--
+-- Function list is in order of application, e.g. @g . f@ is @[f, g]@.
+retComposedFunctions :: [TypedFunction] -> Maybe FullyQualifiedType
+retComposedFunctions =
+  fmap (Json.functionType_ret . _function_typeSig) . listToMaybe . reverse
+
+-- | Argument type of composed functions.
+--
+-- Function list is in order of application, e.g. @g . f@ is @[f, g]@.
+argComposedFunctions :: [TypedFunction] -> Maybe FullyQualifiedType
+argComposedFunctions =
+  fmap (Json.functionType_arg . _function_typeSig) . listToMaybe
 
 -- | Render composed functions.
 --

@@ -106,15 +106,14 @@ mkTypeaheadInputs
 mkTypeaheadInputs initialSuggestions (mSrc, mDst) = do
   script_ $ "function " <> jsTriggerFunctionName <> "(event) { return event instanceof KeyboardEvent }"
   pure
-    ( mkInput' "src" mSrc
-    , mkInput' "dst" mDst
+    ( mkInput' [required_ ""] "src" mSrc
+    , mkInput' [] "dst" mDst
     )
   where
-    mkInput' = mkInput jsTriggerFunctionName attrs initialSuggestions
+    mkInput' attrs = mkInput jsTriggerFunctionName (placeholderAttr : attrs) initialSuggestions
 
-    attrs =
-      [ placeholder_ "enter an unqualified type name, e.g. Text, and select the qualified name above"
-      ]
+    placeholderAttr =
+      placeholder_ "enter an unqualified type name, e.g. Text, and select the qualified name above"
 
     jsTriggerFunctionName = "checkUserKeydown"
 
@@ -139,7 +138,6 @@ mkInput jsTriggerFunctionName attrs initialSuggestions id' mInitialValue = do
     , hxPushUrl_ "false"
     , autocomplete_ "off"
     , spellcheck_ "off"
-    , required_ ""
     , autofocus_
     ]
   where

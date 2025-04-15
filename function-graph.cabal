@@ -80,6 +80,7 @@ library function-graph-server
                     , time
                     , file-embed
                     , these
+                    , dump-decls-lib
     hs-source-dirs:   src/server
     default-language: Haskell2010
 

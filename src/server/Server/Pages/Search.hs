@@ -52,6 +52,7 @@ import Data.Functor ((<&>))
 import qualified Lucid.Servant
 import Data.Data (Proxy (Proxy))
 import qualified Server.Pages.Typeahead
+import qualified Types
 
 -- | Things we want to precompute when creating the handler
 data SearchEnv = SearchEnv
@@ -167,31 +168,37 @@ handler'
   -> SearchEnv
   -> HandlerType (Either ValidationError (HtmlStream IO ()))
 handler' cfg searchEnv _ mSrc mDst mMaxCount mNoGraph =
-  forM validatedVertices $ \(src, dst) -> do
-    page cfg searchEnv src dst (fromMaybe defaultLimit mMaxCount) mNoGraph
+  forM validatedVertices $ \(src, mDst') -> do
+    page cfg searchEnv src mDst' (fromMaybe defaultLimit mMaxCount) mNoGraph
   where
     defaultLimit = 100 -- TODO: add as HTML input field
 
     validatedVertices
       :: Either
           (These (InputFieldValidationError 'Src) (InputFieldValidationError 'Dst))
-            (FunGraph.FullyQualifiedType, FunGraph.FullyQualifiedType)
+            (FunGraph.FullyQualifiedType, Maybe FunGraph.FullyQualifiedType)
     validatedVertices =
       let render = Server.Pages.Typeahead.renderSearchValue
-          resSrc = validateVertex (\src -> mkHref' (Just $ render src) mDst) mSrc
-          resDst = validateVertex (\dst -> mkHref' mSrc (Just $ render dst)) mDst
-      in case (resSrc, resDst) of
-        (Right src, Right dst) -> Right (src, dst)
+          mDst_ = if mDst == Just "" then Nothing else mDst
+          resSrc = vertexIsPresent mSrc >>= validateVertex (\src -> mkHref' (Just $ render src) mDst)
+          mResDst = traverse (validateVertex (\dst -> mkHref' mSrc (Just $ render dst))) mDst_
+      in case (resSrc, mResDst) of
+        (Right src, Right mDst') -> Right (src, mDst')
         (Left err, Right _) -> Left $ This err
         (Right _, Left err) -> Left $ That err
         (Left err1, Left err2) -> Left $ These err1 err2
 
+    vertexIsPresent
+      :: Maybe T.Text
+      -> Either (InputFieldValidationError inputField) T.Text
+    vertexIsPresent Nothing = Left InputFieldValidationError_MissingVertex
+    vertexIsPresent (Just vertex) = Right vertex
+
     validateVertex
       :: (FunGraph.FullyQualifiedType -> Attribute)
-      -> Maybe T.Text
+      -> T.Text
       -> Either (InputFieldValidationError inputField) FunGraph.FullyQualifiedType
-    validateVertex _ Nothing = Left InputFieldValidationError_MissingVertex
-    validateVertex mkHref (Just txt) =
+    validateVertex mkHref txt =
       let lookupVertex = searchEnvVertexLookup searchEnv
       in maybe
         (Left $ InputFieldValidationError_NoSuchVertex txt mkHref)
@@ -210,12 +217,12 @@ page
   :: SearchConfig
   -> SearchEnv
   -> FunGraph.FullyQualifiedType
-  -> FunGraph.FullyQualifiedType
+  -> Maybe FunGraph.FullyQualifiedType
   -> Word
   -> Maybe NoGraph
   -> Handler (HtmlStream IO ())
-page cfg searchEnv src dst maxCount' mNoGraph = do
-  eQueryResultStream <- liftIO $ query' (src, dst)
+page cfg searchEnv src mDst maxCount' mNoGraph = do
+  eQueryResultStream <- liftIO $ query' (src, mDst)
   queryResultStream <- either
     (internalError . missingVertexError)
     pure
@@ -240,12 +247,20 @@ page cfg searchEnv src dst maxCount' mNoGraph = do
                   streamHtml $ thead_ $
                     tr_ $ do
                       td_ "Function composition"
+                      when (isNothing mDst) $
+                        td_ "Result type"
                       td_ "Dependencies"
                   rows
             mkTableRow :: ([FunGraph.TypedFunction], Word) -> Html ()
             mkTableRow (result, resultNumber) =
                 tr_ $ do
                   td_ $ renderResult (result, resultNumber)
+                  when (isNothing mDst) $
+                    td_ $ mkMonoText $ toHtml $
+                      maybe
+                        ""
+                        mkTypeLink
+                        (FunGraph.retComposedFunctions result)
                   td_ $
                     mconcat $
                       intersperse ", " $
@@ -282,7 +297,7 @@ page cfg searchEnv src dst maxCount' mNoGraph = do
       [ "Query returned 'no such vertex' error for vertex:"
       , fromString $ show v
       , "but we have the vertices right here:"
-      , fromString (show $ bimap FunGraph.renderFullyQualifiedType FunGraph.renderFullyQualifiedType (src, dst)) <> "."
+      , fromString (show $ bimap FunGraph.renderFullyQualifiedType (fmap FunGraph.renderFullyQualifiedType) (src, mDst)) <> "."
       , "Please report bug at https://github.com/runeksvendsen/haskell-function-graph/issues."
       ]
 
@@ -309,13 +324,14 @@ page cfg searchEnv src dst maxCount' mNoGraph = do
           openSvgInNewWindowBtn svgGraphId
 
     noResultsText =
-      mkErrorText $ mconcat
+      let mkToVertexText dst =
+            [ " to "
+            , mkMonoText $ toHtml $ FunGraph.renderFullyQualifiedType dst
+            ]
+      in mkErrorText $ mconcat $
         [ "No results found. No path from "
         , mkMonoText $ toHtml $ FunGraph.renderFullyQualifiedType src
-        , " to "
-        , mkMonoText $ toHtml $ FunGraph.renderFullyQualifiedType dst
-        , "."
-        ]
+        ] ++ maybe [] mkToVertexText mDst ++ ["."]
 
     timedOutText :: Html ()
     timedOutText =
@@ -330,6 +346,15 @@ page cfg searchEnv src dst maxCount' mNoGraph = do
         , target_ "_blank"
         ]
         (mkMonoText $ toHtml $ FunGraph.fgPackageName fnPkg)
+
+    mkTypeLink = mkMonoText .
+      FunGraph.renderFullyQualifiedTypeGeneric
+        toHtml
+        (\tycon ->
+            a_
+              [href_ $ Types.tgTyConHackageSrcUrl tycon, target_ "_blank"]
+              (toHtml $ Types.fgTyConName tycon)
+        )
 
     queryTreeTimeoutIO =
       maybe
