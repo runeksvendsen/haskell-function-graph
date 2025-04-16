@@ -2,7 +2,7 @@ name: Build and push Docker image
 
 on:
   push:
-    branches: ['release']
+    # TMP! Add filter back before merging
 
 env:
   REGISTRY: ghcr.io
