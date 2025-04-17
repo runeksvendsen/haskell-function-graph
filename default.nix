@@ -18,9 +18,9 @@ let
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/bellman-ford.git";
       rev = "ef7c86f36b13d109f58b70946e023fa83502dec8";
+      ref = "monad-dijkstra-constraint";
     };
     in import src { inherit nixpkgs compiler; };
-
 
   dump-decls-lib =
     let src = builtins.fetchGit {
