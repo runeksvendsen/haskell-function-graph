@@ -37,7 +37,7 @@ jobs:
 
       - name: Build and load image
         run: |
-          set -euo pipefail
+          set -euox pipefail
           IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository }}/web-server"
           IMAGE_PATH="$(nix-build --no-out-link --argstr name $IMAGE_NAME nix/docker.nix)"
           IMAGE_NAME_WITH_TAG="$(docker load -i \"$IMAGE_PATH\" | sed -r 's/Loaded image: (.*)/\1/')"
@@ -45,6 +45,7 @@ jobs:
 
       - name: Push image
         run: |
+          set -euox pipefail
           docker push "$IMAGE_NAME_WITH_TAG"
           docker tag "$IMAGE_NAME_WITH_TAG" "$IMAGE_NAME:latest"
           docker push "$IMAGE_NAME:latest"
