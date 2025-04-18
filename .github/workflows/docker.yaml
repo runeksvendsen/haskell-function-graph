@@ -40,7 +40,7 @@ jobs:
           set -euox pipefail
           IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository }}/web-server"
           IMAGE_PATH="$(nix-build --no-out-link --argstr name $IMAGE_NAME nix/docker.nix)"
-          IMAGE_NAME_WITH_TAG="$(docker load -i \"$IMAGE_PATH\" | sed -r 's/Loaded image: (.*)/\1/')"
+          IMAGE_NAME_WITH_TAG="$(docker load -i $IMAGE_PATH | sed -r 's/Loaded image: (.*)/\1/')"
           echo "IMAGE_NAME_WITH_TAG=$IMAGE_NAME_WITH_TAG" >> "$GITHUB_ENV"
 
       - name: Push image
