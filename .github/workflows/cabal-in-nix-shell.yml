@@ -18,7 +18,7 @@ jobs:
       - name: Install Nix
         uses: nixbuild/nix-quick-install-action@v30
         with:
-          nix_version: 2.13.3
+          nix_version: 2.24.12
           nix_conf: |
             substituters = https://cache.nixos.org https://cache.iog.io
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
