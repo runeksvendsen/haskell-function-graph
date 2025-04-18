@@ -105,7 +105,7 @@ mkQueryFunction port = do
             htmlStreamToStream
             Nothing -- TODO: also bench 'HX-Boosted'?
             (Just $ FunGraph.renderFullyQualifiedType src)
-            (Just $ FunGraph.renderFullyQualifiedType dst)
+            (FunGraph.renderFullyQualifiedType <$> dst)
             (Just $ fromIntegral maxCount)
             mNoGraph
       in Servant.Client.Streaming.runClientM clientM clientEnv >>= either Ex.throwIO pure

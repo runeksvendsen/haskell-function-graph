@@ -64,7 +64,7 @@ main = do
     vertices <- ST.stToIO $ DG.vertexLabels graph
     forM_ vertices $ \src ->
       forM_ vertices $ \dst -> do
-        res <- query timoutMillis graph src dst
+        res <- query timoutMillis graph src (Just dst)
         case res of
           [] -> pure ()
           (fns,_):_ -> when (length fns > 9) $ do
