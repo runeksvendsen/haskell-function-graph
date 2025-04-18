@@ -46,6 +46,5 @@ jobs:
       - name: Push image
         run: |
           set -euox pipefail
-          docker push "$IMAGE_NAME_WITH_TAG"
           docker tag "$IMAGE_NAME_WITH_TAG" "$IMAGE_NAME:latest"
-          docker push "$IMAGE_NAME:latest"
+          docker push --all-tags "$IMAGE_NAME_WITH_TAG"
