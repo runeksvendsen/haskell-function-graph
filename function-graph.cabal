@@ -82,6 +82,7 @@ library function-graph-server
                     , time
                     , file-embed
                     , these
+                    , dump-decls-lib
                     , optparse-applicative
                     , ansi-terminal
     hs-source-dirs:   src/server
