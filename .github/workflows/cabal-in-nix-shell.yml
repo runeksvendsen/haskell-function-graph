@@ -27,8 +27,8 @@ jobs:
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v6
         with:
-          primary-key: nix-shell-${{ runner.os }}-${{ hashFiles('shell.nix', 'nix/pkgs.nix') }}
-          restore-prefixes-first-match: nix-shell-${{ runner.os }}-
+          primary-key: nix-shell-${{ matrix.os }}-${{ hashFiles('shell.nix', 'nix/pkgs.nix') }}
+          restore-prefixes-first-match: nix-shell-${{ matrix.os }}-
           gc-max-store-size-linux: 4G
 
       - name: Cache cabal stuff
@@ -38,8 +38,8 @@ jobs:
             ~/.cabal/packages
             ~/.cabal/store
             dist-newstyle
-          key: ${{ runner.os }}-${{ hashFiles('**/*.cabal', '**/cabal.project', '**/cabal.project.freeze') }}
-          restore-keys: ${{ runner.os }}-
+          key: ${{ matrix.os }}-${{ hashFiles('**/*.cabal', '**/cabal.project', '**/cabal.project.freeze') }}
+          restore-keys: ${{ matrix.os }}-
 
       # Fixes error:
       #   Detected Bash version that isn't supported by Nixpkgs (3.2.57(1)-release)
