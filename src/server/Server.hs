@@ -2,15 +2,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE StrictData #-}
 
 module Server
   ( main
   , app
   , withHandlers
   , Server.Pages.Search.defaultSearchConfig, Server.Pages.Search.SearchConfig(..)
+  , Config.mkDefaultServerConfig, Config.ServerConfig
   )
   where
 
+import qualified Server.Config as Config
 import qualified Server.Pages.Root
 import qualified Server.Pages.Search
 import qualified Server.Pages.Typeahead
@@ -33,11 +36,16 @@ import qualified Data.Text.Encoding.Error
 import qualified Data.List.NonEmpty as NE
 import Control.Monad (unless)
 
-main :: Server.Pages.Search.SearchConfig -> Html () -> Int -> FilePath -> IO ()
-main searchConfig appendToHead port graphDataFilename =
+main :: Config.ServerConfig -> IO ()
+main serverConfig =
   withHandlers FunGraph.Util.putStrFlush searchConfig appendToHead graphDataFilename $ \handlers -> do
     putStrLn $ "Running server on " <> "http://localhost:" <> show port
     run port $ enableProdMiddleware $ app handlers
+  where
+    searchConfig = Config.serverConfigSearchConfig serverConfig
+    appendToHead = Config.serverConfigAppendToHeadHtml serverConfig
+    port = Config.serverConfigPort serverConfig
+    graphDataFilename = Config.serverConfigGraphDataFilename serverConfig
 
 withHandlers
   :: (String -> IO ()) -- ^ Log 'String' without trailing newline
