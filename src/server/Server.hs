@@ -39,7 +39,7 @@ import Control.Monad (unless)
 main :: Config.ServerConfig -> IO ()
 main serverConfig =
   withHandlers FunGraph.Util.putStrFlush searchConfig appendToHead graphDataFilename $ \handlers -> do
-    putStrLn $ "Running server on " <> "http://localhost:" <> show port
+    FunGraph.Util.putStrFlush $ "Running server on " <> "http://localhost:" <> show port <> "\n"
     run port $ enableProdMiddleware $ app handlers
   where
     searchConfig = Config.serverConfigSearchConfig serverConfig
