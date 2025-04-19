@@ -2,6 +2,7 @@
 , pkgs ? import ./pkgs.nix {
     system = "x86_64-linux"; # putting e.g. macOS executables inside a Docker image doesn't work that well apparently
   }
+, serverPort ? 8080
 }:
 with pkgs.pkgs;
 let exe = import ../default.nix {};
@@ -14,7 +15,6 @@ let exe = import ../default.nix {};
         cp $src/${graphFileName} $out/
       '';
     };
-    serverPort = 8080;
 in dockerTools.buildImage {
   name = name;
   copyToRoot = buildEnv {
