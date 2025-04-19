@@ -5,7 +5,7 @@ let
       sha256 = "1llhad9y24bqp7ib8ls2fwk4jpqakyrzhy7p2djkqlbsnhzcvd1q";
     }) {};
 in
-with (import ./nix/pkgs.nix);
+with (import ./nix/pkgs.nix {});
 pkgs.mkShell {
   nativeBuildInputs = [
     pkgs.haskell.compiler.ghc90
