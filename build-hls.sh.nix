@@ -1,4 +1,4 @@
-{ pkgs ? (import ./nix/pkgs.nix).pkgs
+{ pkgs ? (import ./nix/pkgs.nix {}).pkgs
 , hls-version ? "2.4.0.0"
 , exe-dir-expression ? "$(pwd)/hls"
 }:

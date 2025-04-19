@@ -1,4 +1,4 @@
-{ nixpkgsRaw ? (import ./nix/pkgs.nix).pkgs
+{ nixpkgsRaw ? (import ./nix/pkgs.nix {}).pkgs
 , compiler ? "ghc90"
 }:
 let

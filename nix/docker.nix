@@ -1,5 +1,7 @@
 { name ? "haskell-function-graph"
-, pkgs ? import ./pkgs.nix
+, pkgs ? import ./pkgs.nix {
+    system = "x86_64-linux"; # putting e.g. macOS executables inside a Docker image doesn't work that well apparently
+  }
 }:
 with pkgs.pkgs;
 let exe = import ../default.nix {};
