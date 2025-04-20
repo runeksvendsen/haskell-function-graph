@@ -20,6 +20,16 @@ Run
 $(nix-build --no-out-link)/bin/server-wrapped -p 8080 -g data/all3.json
 ```
 
+### Using Docker
+
+A Docker image, containing the web server, is built and pushed in CI to the [Packages of this repository](https://github.com/runeksvendsen?tab=packages&repo_name=haskell-function-graph). To run it, use the following command:
+
+```
+docker run -p 8080:8080 ghcr.io/runeksvendsen/haskell-function-graph/web-server:latest
+```
+
+where the `latest` tag points to the build of the most recent commit on `main`.
+
 ## Demo
 
 ![](docs/img/demo.gif)

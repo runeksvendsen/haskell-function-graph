@@ -1,4 +1,4 @@
-{ nixpkgsRaw ? (import ./nix/pkgs.nix).pkgs
+{ nixpkgsRaw ? (import ./nix/pkgs.nix {}).pkgs
 , compiler ? "ghc90"
 }:
 let
@@ -17,10 +17,10 @@ let
   bellman-ford =
     let src = builtins.fetchGit {
       url = "https://github.com/runeksvendsen/bellman-ford.git";
-      rev = "9a511144d46f07ff0e3632120b7d6eecf1491814";
+      rev = "69434f809ff768ec0a35d297eb0b2557b9c7fc20";
+      ref = "monad-dijkstra-constraint";
     };
     in import src { inherit nixpkgs compiler; };
-
 
   dump-decls-lib =
     let src = builtins.fetchGit {
@@ -47,12 +47,21 @@ let
     nixpkgs.pkgs.haskell.packages.${compiler}.callCabal2nix "function-graph" ./. args
   );
 
+  # NOTE: This little trick reduces the size of the Docker image
+  #       (produced by nix/docker.nix) from 4.5GB to 275MB.
+  getStandaloneBinOutput = drv:
+    let standaloneBinOutput =
+          nixpkgs.pkgs.haskell.lib.overrideCabal drv (_: {
+            enableSeparateBinOutput = true; # create a separate output called "bin" for the derivation "drv", which contains only binaries and their dependencies
+          });
+    in nixpkgs.lib.getOutput "bin" standaloneBinOutput; # get the store path of this "bin" output (instead of the default "out" output)
+
   function-graph-server-wrapped = nixpkgs.runCommand "server-wrapped" {
       buildInputs = [ nixpkgs.makeWrapper ];
     }
     ''
         mkdir -p $out/bin
-        makeWrapper ${function-graph}/bin/server $out/bin/server-wrapped \
+        makeWrapper ${getStandaloneBinOutput function-graph}/bin/server $out/bin/server-wrapped \
           --set PATH ${nixpkgs.lib.makeBinPath [ nixpkgs.graphviz ]}
     '';
 in

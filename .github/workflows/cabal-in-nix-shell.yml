@@ -46,7 +46,7 @@ jobs:
       #   Please install Bash 4 or greater to continue.
       - name: Install Bash
         run: |
-          nix-env -i --from-expression '_: (import ./nix/pkgs.nix).pkgs.bash'
+          nix-env -i --from-expression '_: (import ./nix/pkgs.nix {}).pkgs.bash'
 
       - name: Test nix-shell
         run: nix-shell --run "echo 'it works \o/'"
