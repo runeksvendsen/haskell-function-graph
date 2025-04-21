@@ -25,7 +25,7 @@ jobs:
             system-features = benchmark big-parallel kvm nixos-test
 
       - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@f68581e27a06c8c9115dec37e42325d562d9664b
         with:
           primary-key: nix-shell-${{ matrix.os }}-${{ hashFiles('shell.nix', 'nix/pkgs.nix') }}
           restore-prefixes-first-match: nix-shell-${{ matrix.os }}-
