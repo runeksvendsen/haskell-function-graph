@@ -5,7 +5,7 @@
 , serverPort ? 8080
 }:
 with pkgs.pkgs;
-let exe = import ../default.nix {};
+let exe = import ../default.nix { nixpkgsRaw = pkgs.pkgs; };
     graphFileName = "all3.json";
     graphFileData = stdenv.mkDerivation {
       name = "haskell-function-graph-graph-data-file";
