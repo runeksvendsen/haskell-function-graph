@@ -79,7 +79,7 @@ data SearchConfig = SearchConfig
 
 defaultSearchConfig :: SearchConfig
 defaultSearchConfig = SearchConfig
-  { searchConfigTimeout = 0.1
+  { searchConfigTimeout = 1.0
   , searchConfigTrace = Nothing
   , searchConfigSuggestionLimit = 10
   }
